@@ -1,0 +1,69 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 16,
+  "height": 16,
+  "palette": [
+    "FFFFFF00",
+    "4E4E4E00",
+    "B6B6B600",
+    "E3E3E300",
+    "CDCDCD00",
+    "727272FF",
+    "F6F6F600",
+    "F6F6F6FF",
+    "CDCDCDFF",
+    "AEAEAEFF",
+    "E2E2E2FF",
+    "939393FF",
+    "585858FF",
+    "35353500",
+    "7F7F7FFF"
+  ],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 0,
+          "w": 16,
+          "h": 1,
+          "slot": 1
+        },
+        {
+          "op": "grid",
+          "x": 0,
+          "y": 1,
+          "grid": [
+            "0011111000000000",
+            "0123342115555000",
+            "0136363557899500",
+            "1466655877A78950",
+            "145557A88AA8B5C0",
+            "D577AA88888B55C0",
+            "D5A8AA7789E55EC0",
+            "DC99877ABEE5EEC0",
+            "DC9B9A89EEE98A9C",
+            "DC9BEEB5598A79BC",
+            "0DC9EE55EB989E5C",
+            "00CBEE5ECBBE555C",
+            "000CBBEC0CB555C0",
+            "0000CCC000CCCC00"
+          ]
+        },
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 15,
+          "w": 16,
+          "h": 1,
+          "slot": 1
+        }
+      ]
+    }
+  ]
+}

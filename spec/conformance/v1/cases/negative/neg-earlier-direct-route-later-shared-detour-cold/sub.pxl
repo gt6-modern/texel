@@ -1,0 +1,1 @@
+{"format": "PXL", "version": 1, "encoding": "char", "width": 1, "height": 1, "palette": ["FFFFFFFF"], "layers": [{"name": "b", "blend": "normal", "ops": [{"op": "stamp", "asset": "a_first", "x": 0, "y": 0}, {"op": "stamp", "asset": "z_detour", "x": 0, "y": 0}]}], "assets": {"a_first": {"kind": "pxl", "path": "s0.pxl"}, "z_detour": {"kind": "pxl", "path": "detour.pxl"}}}

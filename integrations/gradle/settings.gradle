@@ -1,0 +1,7 @@
+/*
+ * Texel 的 Gradle 薄集成（PRD §20 阶段 5）。
+ *
+ * 它是**调用方**，不是 compiler：只负责枚举 target、给 asset root 与 bindings、映射输出路径、
+ * 用依赖清单驱动增量、把运行时指纹算进缓存键。PXL 语义一律在 compiler 里，集成层不得重实现。
+ */
+rootProject.name = 'texel-gradle-integration'

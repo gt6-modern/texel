@@ -1,0 +1,139 @@
+case	form	defect	expected	notes	covers
+single-fill-4x4	single	-	entry.pxl,pixels	4x4 单图层单 fill;期望像素 = v0 oracle 对 version:0 孪生文档的渲染结果	v1§3.2,v1§3.3:v1 顶层成员集合 + 沿用 v0 的图层与 fill;不含 assets/params/参引
+single-palette-grid-4x4	single	-	entry.pxl,pixels	4x4 单 grid;4 项 palette 对应 token 0-3(即 slot 1-4),另含透明 token	v1§3.2,v1§3.3:palette + grid;token→slot 映射按 v0 §4.2,v1 不改
+graph-stamp-pxl	graph	-	entry.pxl,pixels,dependencies	期望像素由 v1 reference oracle 算出(asset stamp / 参数替换),Java compiler 逐字节比对	v1§13.3.1,v1§5.1,v1§5.3:外部 asset 声明与 stamp 来源;v1§9.4 清单两行
+graph-stamp-pxl-reuse	graph	-	entry.pxl,pixels,dependencies	期望像素由 v1 reference oracle 算出(asset stamp / 参数替换),Java compiler 逐字节比对	v1§9.4,v1§10.3:同一依赖多次 stamp 的两件相反后果
+bindings-color-palette	bindings	-	entry.pxl	期望像素由 v1 reference oracle 算出(asset stamp / 参数替换),Java compiler 逐字节比对	v1§6.1,v1§6.2,v1§6.4,v1§13.3.3:color 参引与 bindings.json
+bindings-integer-slot	bindings	-	entry.pxl	期望像素由 v1 reference oracle 算出(asset stamp / 参数替换),Java compiler 逐字节比对	v1§6.1,v1§6.2,v1§6.5,v1§13.3.3:integer 参引与 bindings.json
+negative/neg-version-missing	negative	version	entry.pxl,error	只缺 version 这一处;其余与 single-fill-4x4 逐字节相同	PXL001:v1§2 分派域——version 缺失;阶段表第 2 行(v1 阶段 D)
+negative/neg-version1-unknown-field	negative	structure	entry.pxl,error	与 v0 同码;刻意不含参数,故不涉及阶段 P	PXL001:v1§3.2 顶层成员集合;阶段表第 4 行(= v0 阶段 3)
+negative/neg-path-escape-root	negative	path	entry.pxl,error	asset 未被 stamp 选中,证明声明路径校验独立于选中	PXL008:v1§7 规范化逃逸(.. 弹出空栈);阶段 R1
+negative/neg-path-uppercase	negative	path	entry.pxl,error	磁盘上确有 parts/Blade.pxl,故缺陷不可能是 MISSING	PXL008:v1§7 大写非法且不自动转小写;阶段 R1
+negative/neg-path-case-mismatch	negative	path	entry.pxl,error	spelling.tsv 声明实际拼写;asset 被 stamp 选中才会解析	PXL008:v1§8.2 CASE_MISMATCH + v1§13.3.2 拼写载体;阶段 R2
+negative/neg-dependency-missing-png	negative	dependency	entry.pxl,error	asset 必须被 stamp 选中,否则 PXL009 不会发生	PXL009:v1§8.2 MISSING;v1§9.1 读取按选择;阶段 R2
+negative/neg-png-asset-not-png	negative	png	entry.pxl,error	素材字节不是 PNG(无签名);必须被 stamp 选中才会读	PXL009:v1§11.1 声明 kind 与实际字节不符;v1§8.3 边界;阶段 R2
+negative/neg-png-asset-structure-invalid	negative	png	entry.pxl,error	素材=签名+IHDR(33 字节),无 IDAT/IEND;读头部合法、解码缺 IEND	PXL006:v1§11.1 有签名但结构非法;v0 §8.5 缺 IEND;阶段 R2
+negative/neg-cycle-self	negative	cycle	entry.pxl,error	自引用同时使深度无限;本条钉 R3 先于 R4	PXL010:v1§9.2 循环检测;阶段 R3 先于 R4
+negative/neg-cycle-two-documents	negative	cycle	entry.pxl,error	两节点环 entry→b→back→b;顺带钉相对解析	PXL010:v1§9.2,v1§7 相对解析;阶段 R3
+negative/neg-budget-ref-depth	negative	budget	entry.pxl,error	66 个文档的线性链,深度 65;其它预算远低	PXL011:v1§10.2 引用深度 64;阶段 R4 首项
+negative/neg-budget-global-raster	negative	budget	entry.pxl,error	每文档光栅恰好 2^22(合法),5 份合计 20971520 > 2^24	PXL011:v1§10.2,v1§10.3 全局光栅;阶段 R4
+negative/neg-params-undeclared	negative	params	entry.pxl,error	参数/bindings 已实现（阶段 4）；判据 PXL012 由 CompilerConformanceMain 逐条执行	PXL012:v1§6.3 未声明参数;阶段 P
+negative/neg-params-required-missing	negative	params	entry.pxl,error	参数/bindings 已实现（阶段 4）；判据 PXL012 由 CompilerConformanceMain 逐条执行	PXL012:v1§6.1,v1§6.3 必需参数缺失;阶段 P
+negative/neg-params-type-mismatch	negative	params	entry.pxl,error	参数/bindings 已实现（阶段 4）；判据 PXL012 由 CompilerConformanceMain 逐条执行	PXL012:v1§6.3,v1§6.4 强类型;阶段 P
+negative/neg-priority-005-after-param-slot	negative	priority	entry.pxl,error	参数/bindings 已实现（阶段 4）；判据 PXL005 由 CompilerConformanceMain 逐条执行	PXL005:v1§6.5 判定表第一行;阶段 P 通过,阶段 10 报错
+negative/neg-version-negative	negative	version	entry.pxl,error	version 越出通用域 0..65535 -> PXL001；走生产入口而非 v0 的 PxlParser	PXL001:v1§2 版本分派域 0..65535，域外是 PXL001、域内不支持才是 PXL007
+negative/neg-version-over-domain	negative	version	entry.pxl,error	version 越出通用域 0..65535 -> PXL001；走生产入口而非 v0 的 PxlParser	PXL001:v1§2 版本分派域 0..65535，域外是 PXL001、域内不支持才是 PXL007
+negative/neg-param-number-as-color	negative	params	entry.pxl,error	子文档 color 参数收到 JSON 数字 12345678：它恰好是合法的八位十六进制文本，所以只有按 JSON 类型校验才拦得住（§6.3 值类型必须与声明一致）。	PXL012:v1§6.3 子文档参数值类型必须与声明一致
+negative/neg-param-string-as-integer	negative	params	entry.pxl,error	子文档 integer 参数收到 JSON 字符串 "1"：文本解析会接受它，必须按 JSON 类型校验才判红（§6.3）。	PXL012:v1§6.3 子文档参数值类型必须与声明一致
+negative/neg-cache-shared-leaf-cold	negative	budget	entry.pxl,error	「共享 leaf」原反例（冷）：先访问的分支在第 65 层超深、后访问的分支在第 63 层回到祖先。冷路径应报 PXL011（深度）。	PXL011:v1§10.2 引用深度上限——缓存命中不得改变首个错误
+negative/neg-cache-shared-leaf-warm	negative	budget	entry.pxl,error	「共享 leaf」原反例（热）：同一引用图，预热后再走一遍必须仍报 PXL011——缓存不得改变首个错误。	PXL011:v1§10.2 引用深度上限——缓存命中不得改变首个错误
+negative/neg-cache-cycle-first-cold	negative	cycle	entry.pxl,error	「先循环」原反例（冷）：先访问的分支在第 63 层回到祖先，后访问的分支才会超深。冷路径应报 PXL010。	PXL010:v1§9.2 循环引用——缓存命中不得改变首个错误
+negative/neg-cache-cycle-first-warm	negative	cycle	entry.pxl,error	「先循环」原反例（热）：同一引用图预热后必须仍报 PXL010——缓存不得改变首个错误。	PXL010:v1§9.2 循环引用——缓存命中不得改变首个错误
+negative/neg-cache-cycle-first-warm-leaf-first	negative	cycle	entry.pxl,error	「先循环」原反例（热 + 先浅层预热共享 leaf）：仍必须报 PXL010。	PXL010:v1§9.2 循环引用——缓存命中不得改变首个错误
+negative/neg-null-params	negative	structure	entry.pxl,error	顶层 params 显式写成 null：不是「没写这个字段」，必须 PXL001（发布态复核 F12）。	PXL001:v1§5.1 显式 null 不是缺字段
+negative/neg-null-assets	negative	structure	entry.pxl,error	顶层 assets 显式写成 null：必须 PXL001。	PXL001:v1§5.1 显式 null 不是缺字段
+negative/neg-null-asset-params	negative	structure	entry.pxl,error	asset 声明里的 params 显式写成 null：必须 PXL001。	PXL001:v1§5.1 显式 null 不是缺字段
+negative/neg-cache-depth-chain-warm	negative	budget	entry.pxl,error	缓存命中后越深：入口深度守卫拒绝第 65 篇，引用链必须收口到 entry.pxl	PXL011:v1§10.2 深度上限 + §9.3 引用链收口
+negative/neg-cycle-two-node	negative	cycle	entry.pxl,error	双节点环：entry.pxl -> b.pxl -> entry.pxl。链必须含闭环末端（F20）。	PXL010:v1§9.2 循环引用 + §9.3 引用链收口
+long-ref-normalizes-short	single	-	entry.pxl,pixels	原始 4514 字符、规范化后 parts/leaf.pxl，必须编译成功（F18）	§5.1 长度限制作用于规范化结果
+negative/neg-path-too-long-after-normalize	negative	path	entry.pxl,error	规范化后 4278 字节超过 4096 → PXL008	PXL008:v1§5.1 规范化后长度上限
+negative/neg-default-string-as-integer	negative	params	entry.pxl,error	integer 的 default 写成字符串 "1"，必须 PXL012	PXL012:v1§6.1 default 必须是声明类型的 JSON 字面量
+negative/neg-cache-depth-general-warm	negative	budget	entry.pxl,error	缓存命中的一般情形：深度取首个越界层，链收到 s31.pxl	PXL011:v1§10.2 + §9.3 链收口
+negative/neg-sprite-param-as-asset	negative	params	entry.pxl,error	sprite 参数进 stamp.asset 位置，必须 PXL012	PXL012:v1§6.2 参引位置白名单按声明类型判定
+negative/neg-forward-sprite-to-asset	negative	params	entry.pxl,error	sprite 参数转发进子文档的 asset 参数，必须 PXL012	PXL012:v1§6.3 转发时类型必须一致
+negative/neg-default-missing-asset-unused	negative	params	entry.pxl,error	default-missing-asset-unused — PXL-v1 §6.4 requires a declared symbol; §6.5 assigns an undeclared binding PXL01	PXL012:v1 见 notes.md
+negative/neg-default-missing-asset-used	negative	params	entry.pxl,error	default-missing-asset-used — PXL-v1 §6.4 requires a declared symbol; §6.5 assigns an undeclared binding PXL01	PXL012:v1 见 notes.md
+negative/neg-default-missing-sprite-unused	negative	params	entry.pxl,error	default-missing-sprite-unused — PXL-v1 §6.4 requires a declared symbol; §6.5 assigns an undeclared binding PXL01	PXL012:v1 见 notes.md
+negative/neg-default-missing-sprite-used	negative	params	entry.pxl,error	default-missing-sprite-used — PXL-v1 §6.4 requires a declared symbol; §6.5 assigns an undeclared binding PXL01	PXL012:v1 见 notes.md
+negative/neg-mirror-reference-flipX	negative	params	entry.pxl,error	mirror-reference-flipX — PXL-v1 §6.2 permits boolean references only in stamp.flipX/flipY.	PXL012:v1 见 notes.md
+negative/neg-required-binding-vs-bad-assets	negative	params	entry.pxl,error	required-binding-vs-bad-assets — PXL-v1 §11.2: parameter stage P (row 3) precedes member/type checks (row 4).	PXL012:v1 见 notes.md
+negative/neg-reference-in-kind	negative	params	entry.pxl,error	reference-in-kind — PXL-v1 §4.2 and §6.2 forbid references in asset.kind; stage P precedes kind enum	PXL012:v1 见 notes.md
+negative/neg-unknown-op-reference	negative	params	entry.pxl,error	unknown-op-reference — PXL-v1 §6.2: integer references are allowed only for known ops; illegal position	PXL012:v1 见 notes.md
+negative/neg-malformed-reference-op	negative	params	entry.pxl,error	malformed-reference-op — PXL-v1 §4.2: a string starting with $ outside the whitelist is PXL012, before un	PXL012:v1 见 notes.md
+negative/neg-pxl-kind-png-payload	negative	params	entry.pxl,error	pxl-kind-png-payload — PXL-v1 §11.1 maps declared-kind versus actual-byte mismatch to PXL009.	PXL009:v1 见 notes.md
+negative/neg-integer-41-digits-in-coordinate	negative	params	entry.pxl,error	integer-41-digits-in-coordinate — PXL-v1 §6.5: a canonical integer substituted into an out-of-range coordinate is 	PXL002:v1 见 notes.md
+negative/neg-integer-40-digits-in-coordinate	negative	params	entry.pxl,error	integer-40-digits-in-coordinate — PXL-v1 §6.5: a canonical integer substituted into an out-of-range coordinate is 	PXL002:v1 见 notes.md
+plain-control	single	-	entry.pxl,pixels	plain-control（正向控制）	Valid unparameterized v1 document.
+missing-required-alone	negative	params	entry.pxl,error	missing-required-alone（正向控制）	PXL012:Missing required binding alone.
+bad-assets-alone	negative	params	entry.pxl,error	bad-assets-alone（正向控制）	PXL001:Invalid assets container alone.
+unknown-op-no-reference	negative	params	entry.pxl,error	unknown-op-no-reference（正向控制）	PXL004:Unknown op without a reference.
+invalid-kind-no-reference	negative	params	entry.pxl,error	invalid-kind-no-reference（正向控制）	PXL001:Invalid kind enumeration without a reference.
+mirror-literal-control	single	-	entry.pxl,pixels	mirror-literal-control（正向控制）	Literal mirror coordinates and flip flag are legal.
+declared-asset-default	single	-	entry.pxl,pixels	declared-asset-default（正向控制）	A declared symbol default used at the matching stamp slot.
+declared-sprite-default	single	-	entry.pxl,pixels	declared-sprite-default（正向控制）	A declared symbol default used at the matching stamp slot.
+stamp-boolean-reference	single	-	entry.pxl,pixels	stamp-boolean-reference（正向控制）	Boolean reference at the explicitly allowed stamp slot.
+negative/neg-cache-branch-warm	negative	budget	entry.pxl,error	缓存链逐层展开（C01）	PXL011:v1§10.2 + §9.3 链收口
+negative/neg-cache-branch-cold	negative	budget	entry.pxl,error	缓存链逐层展开（C02）	PXL011:v1§10.2 + §9.3 链收口
+negative/neg-invalid-symbol-default-before-invalid-asset-kind	negative	params	entry.pxl,error	Invalid symbol default before invalid asset kind	PXL012:v1 sections 6.4, 6.5, 11.2: undeclared asset default (P) precedes asset kind enu
+negative/neg-malformed-assets-without-parameter-error	negative	params	entry.pxl,error	Malformed assets without parameter error	PXL001:Malformed assets without any parameter error is PXL001.
+negative/neg-reference-in-layers-array-element	negative	params	entry.pxl,error	Reference in layers array element	PXL012:v1 sections 4.2, 6.2, 11.2: layers array elements are not reference positions.
+negative/neg-reference-in-ops-array-element	negative	params	entry.pxl,error	Reference in ops array element	PXL012:v1 sections 4.2, 6.2, 11.2: ops array elements are not reference positions.
+negative/neg-reference-under-a-nested-palette-array	negative	params	entry.pxl,error	Reference under a nested palette array	PXL012:v1 sections 4.2, 6.2, 11.2: a nested palette array is not a direct color element
+negative/neg-extra-point-op-member-must-not-override-parent-op-context	negative	params	entry.pxl,error	Extra point op member must not override parent op context	PXL001:mirror.from.x is allowed; a non-reference extra op member is a structural PXL001
+negative/neg-nested-point-references-only-allowed-for-line-mirror	negative	params	entry.pxl,error	Nested point references only allowed for line/mirror	PXL012:v1 section 6.2 restricts nested from/to replacement to listed ops, not rect; for
+line-direct-x0-reference-control	single	-	entry.pxl,pixels	Line direct x0 reference control	v0 section 5.4: line uses direct x0/y0/x1/y1 fields; parameter at x0 is allowed.
+mirror-nested-from-x-reference-control	single	-	entry.pxl,pixels	Mirror nested from.x reference control	v1 section 6.2: mirror.from.x parameter is explicitly allowed.
+mirror-nested-to-y-reference-control	single	-	entry.pxl,pixels	Mirror nested to.y reference control	v1 section 6.2: mirror.to.y parameter is explicitly allowed.
+negative/neg-extra-point-op-member-with-literal-coordinate-control	negative	params	entry.pxl,error	Extra point op member with literal coordinate control	PXL001:W07 without the valid coordinate reference; extra nested op member is PXL001.
+negative/neg-line-has-no-from-to-fields-no-parameter-syntax-extension	negative	params	entry.pxl,error	Line has no from/to fields; no parameter syntax extension	PXL001:v0 section 5.4 and v1 section 3.3: line has no from/to objects; new section 6.2
+negative/neg-shared-leaf-shallower-first-visit-warm	negative	budget	entry.pxl,error	Shared leaf shallower first visit, warm	PXL011:v1 sections 9.3, 10.4, 12: stop at first depth-65 attempt. A shallow first visit
+negative/neg-shared-leaf-shallower-first-visit-cold	negative	params	entry.pxl,error	Shared leaf shallower first visit, cold	PXL011:C03 without only the entry warm-up edge; real cold traversal stops at s31 at dep
+negative/neg-same-logical-path-with-distinct-bindings-warm	negative	budget	entry.pxl,error	Same logical path with distinct bindings, warm	PXL011:v1 sections 9.2, 9.3: child identity includes bindings; same path with deep and
+negative/neg-same-logical-path-with-distinct-bindings-cold	negative	params	entry.pxl,error	Same logical path with distinct bindings, cold	PXL011:C05 without only the entry warm-up edge; cold traversal stops at s30 at depth65.
+negative/neg-same-logical-path-with-distinct-bindings-warm-reverse	negative	params	entry.pxl,error	Same logical path with distinct bindings, warm reverse	PXL011:C05 with the same-path instances visited in reverse order; isolates replacement
+negative/neg-cli-bound-canonical-integer-41	negative	params	entry.pxl,error	CLI 文本绑定（N03）	PXL002:v1§6.3-6.5 CLI 绑定与默认值同类型
+negative/neg-cli-bound-canonical-integer-40	negative	params	entry.pxl,error	CLI 文本绑定（N04）	PXL002:v1§6.3-6.5 CLI 绑定与默认值同类型
+negative/neg-bad-integer-binding-before-malformed-assets	negative	params	entry.pxl,error	CLI 文本绑定（E05）	PXL012:v1§6.3-6.5 CLI 绑定与默认值同类型
+negative/neg-undeclared-binding-before-malformed-assets	negative	params	entry.pxl,error	CLI 文本绑定（E06）	PXL012:v1§6.3-6.5 CLI 绑定与默认值同类型
+negative/neg-noncanonical-huge-cli-integer-at-coordinate	negative	budget	entry.pxl,error	Noncanonical huge CLI integer at coordinate	PXL012:v1 sections 6.3-6.4: CLI integer spelling cannot use exponent; HUGE is not permi
+negative/neg-canonical-huge-cli-integer-control	negative	params	entry.pxl,error	Canonical huge CLI integer control	PXL002:Canonical positive 41-digit integer is a valid parameter; pixel.x range is PXL00
+negative/neg-unused-noncanonical-huge-integer-binding-must-still-be-inval	negative	budget	entry.pxl,error	Unused noncanonical huge integer binding must still be invalid	PXL012:All provided bindings must be valid even when unused. An integer binding of 1e41
+negative/neg-forbidden-array-reference-before-malformed-assets	negative	params	entry.pxl,error	Forbidden array reference before malformed assets	PXL012:v1 sections 4.2,6.2,11.2: array string reference is forbidden and must be caught
+negative/neg-deep-nonwhitelisted-reference-before-malformed-assets	negative	params	entry.pxl,error	Deep nonwhitelisted reference before malformed assets	PXL012:Deep extra.x is outside the full path whitelist; parameter stage must precede ma
+negative/neg-deep-forbidden-reference-without-malformed-assets	negative	params	entry.pxl,error	Deep forbidden reference without malformed assets	PXL012:Same deep forbidden reference without the malformed assets conflict.
+negative/neg-slash-containing-member-cannot-impersonate-mirror-point	negative	params	entry.pxl,error	Slash-containing member cannot impersonate mirror point	PXL012:Slash-containing unknown member under pixel must be rejected as a forbidden refe
+negative/neg-slash-key-reference-before-invalid-encoding	negative	params	entry.pxl,error	Slash key reference before invalid encoding	PXL012:Slash-containing unknown member under mirror is rejected before invalid encoding
+negative/neg-object-map-keys-must-not-masquerade-as-array-indices	negative	params	entry.pxl,error	Object map keys must not masquerade as array indices	PXL012:layers and ops must be arrays: object-member strings fake/fake are not array-ind
+negative/neg-fill-has-no-x-field-substitution-may-not-widen-op-members	negative	params	entry.pxl,error	Fill has no x field; substitution may not widen op members	PXL012:Observed Java012/Python001 is definite; seal whether nonexistent direct numeric 
+negative/neg-earlier-direct-route-later-shared-detour-warm	negative	params	entry.pxl,error	Earlier direct route, later shared detour warm	PXL011:v1 sections 9.3,10.4,12: first failure follows fixed ordered DFS, not shortest e
+negative/neg-earlier-direct-route-later-shared-detour-cold	negative	params	entry.pxl,error	Earlier direct route, later shared detour cold	PXL011:Same graph as C08 with only entry warm-up removed; cold traversal shows the real
+negative/neg-forbidden-width-reference-before-explicit-null-assets	negative	params	entry.pxl,error	Forbidden width reference before explicit null assets	PXL012:Forbidden width reference is PXL012 before assets:null structural error. Null is
+real-array-element-pixel-reference-control	single	-	entry.pxl,pixels	Real array-element pixel reference control	With genuine layers/ops array indices, pixel.x is an allowed integer reference.
+negative/neg-malformed-layer-map-without-reference-control	negative	params	entry.pxl,error	Malformed layer map without reference control	PXL001:W11 without the forbidden reference has only a structure error, PXL001.
+negative/neg-bracket-object-keys-are-not-array-indices	negative	params	entry.pxl,error	Bracket object keys are not array indices	PXL012:v1 6.2 / 11.2: only real layers[i].ops[j] fields admit references; object keys n
+negative/neg-slash-bearing-object-key-is-not-a-path	negative	params	entry.pxl,error	Slash-bearing object key is not a path	PXL012:v1 6.2 / 11.2: only real layers[i].ops[j] fields admit references; object keys n
+real-array-indices-control	single	-	entry.pxl,pixels	Real array indices control	v1 6.2 / 11.2: only real layers[i].ops[j] fields admit references; object keys n
+negative/neg-same-malformed-shape-without-references	negative	params	entry.pxl,error	Same malformed shape without references	PXL001:No parameter failure: structure stage rejects object layers.
+negative/neg-fill-member-s-cannot-match-substring-of-slot	negative	budget	entry.pxl,error	Fill member 's' cannot match substring of slot	PXL012:v1 6.2: fill has only integer member slot; whitelist failure must precede assets
+negative/neg-fill-member-cannot-match-substring-of-slot	negative	budget	entry.pxl,error	Fill member '' cannot match substring of slot	PXL012:v1 6.2: fill has only integer member slot; whitelist failure must precede assets
+negative/neg-illegal-fill-member-without-competing-error	negative	params	entry.pxl,error	Illegal fill member without competing error	PXL012:Removing bad assets restores PXL012 in both implementations.
+actual-fill-slot-reference-control	single	-	entry.pxl,pixels	Actual fill.slot reference control	The real integer member must remain substitutable.
+negative/neg-valid-fill-reference-leaves-assets-structural-failure	negative	params	entry.pxl,error	Valid fill reference leaves assets structural failure	PXL001:A valid parameter use must not mask unrelated structural failure.
+negative/neg-nonexistent-mirror-from-x0	negative	params	entry.pxl,error	Nonexistent mirror.from.x0	PXL012:v1 6.2 forbids extending member sets; v0 5.6 from={x,y,w,h}, to={x,y}.
+negative/neg-nonexistent-mirror-to-w	negative	params	entry.pxl,error	Nonexistent mirror.to.w	PXL012:v1 6.2 forbids extending member sets; v0 5.6 from={x,y,w,h}, to={x,y}.
+negative/neg-nonexistent-mirror-from-slot	negative	params	entry.pxl,error	Nonexistent mirror.from.slot	PXL012:v1 6.2 forbids extending member sets; v0 5.6 from={x,y,w,h}, to={x,y}.
+existing-mirror-from-w-control	single	-	entry.pxl,pixels	Existing mirror.from.w control	Only existing nested integer members are substitutable.
+existing-mirror-to-x-control	single	-	entry.pxl,pixels	Existing mirror.to.x control	Only existing nested integer members are substitutable.
+negative/neg-literal-nonexistent-nested-member-control	negative	params	entry.pxl,error	Literal nonexistent nested member control	PXL001:Without a reference, an unknown member remains a structure error.
+negative/neg-palette-object-values-are-not-palette-array-elements	negative	params	entry.pxl,error	Palette object values are not palette array elements	PXL012:v1 6.2 explicitly permits only palette ARRAY elements; malformed object shape ca
+negative/neg-asset-params-array-elements-are-not-named-bindings	negative	params	entry.pxl,error	Asset params array elements are not named bindings	PXL012:v1 5.2 / 6.2 permit assets.<name>.params.<parameter-name> map entries, not array
+palette-real-array-element-control	single	-	entry.pxl,pixels	Palette real array element control	A real palette array element is a legal color substitution.
+asset-params-real-object-entry-control	single	-	entry.pxl,pixels	Asset params real object entry control	A real child parameter map entry supports typed forwarding.
+negative/neg-literal-palette-object-control	negative	params	entry.pxl,error	Literal palette object control	PXL001:No parameter error: malformed palette container remains PXL001.
+negative/neg-literal-child-binding-array-control	negative	params	entry.pxl,error	Literal child binding array control	PXL001:No parameter error: malformed child binding map remains PXL001.
+negative/neg-complete-parameter-phase-before-assets-structure-missing	negative	params	entry.pxl,error	Complete parameter phase before assets structure: $missing	PXL012:v1 6.5 / 11.2 stage P must reject undeclared references or use-site type mismatc
+negative/neg-complete-parameter-phase-before-assets-structure-c	negative	params	entry.pxl,error	Complete parameter phase before assets structure: $c	PXL012:v1 6.5 / 11.2 stage P must reject undeclared references or use-site type mismatc
+negative/neg-valid-parameter-plus-malformed-assets-control	negative	params	entry.pxl,error	Valid parameter plus malformed assets control	PXL001:If stage P succeeds, malformed assets is correctly PXL001.
+negative/neg-parameter-only-control-missing	negative	params	entry.pxl,error	Parameter-only control: $missing	PXL012:Removing assets structure error isolates the parameter error.
+negative/neg-parameter-only-control-c	negative	params	entry.pxl,error	Parameter-only control: $c	PXL012:Removing assets structure error isolates the parameter error.
+negative/neg-malformed-reference-syntax-in-integer-position	negative	params	entry.pxl,error	Malformed reference syntax in integer position: $	PXL012:v1 4.2 / 6.5 / 11.2 stage P validates reference syntax before numeric structural
+negative/neg-malformed-reference-syntax-in-integer-position-not-a-name	negative	params	entry.pxl,error	Malformed reference syntax in integer position: $Not_a_name	PXL012:v1 4.2 / 6.5 / 11.2 stage P validates reference syntax before numeric structural
+negative/neg-malformed-reference-syntax-in-color-position	negative	params	entry.pxl,error	Malformed reference syntax in color position	PXL012:v1 stage P rejects malformed reference syntax; do not defer to palette PXL005.
+canonical-reference-syntax-control	single	-	entry.pxl,pixels	Canonical reference syntax control	Well-formed declared reference must compile.
+negative/neg-ordinary-non-reference-integer-string-control	negative	params	entry.pxl,error	Ordinary non-reference integer string control	PXL001:Non-dollar literal stays an ordinary field type error.
+negative/neg-ordinary-non-reference-malformed-color-control	negative	params	entry.pxl,error	Ordinary non-reference malformed color control	PXL005:Non-dollar literal stays an ordinary palette error.
+negative/neg-mirror-flipx-is-not-an-integer-or-permitted-boolean-paramete	negative	budget	entry.pxl,error	Mirror flipX is not an integer or permitted boolean parameter field	PXL012:v1 6.2 permits boolean references only in stamp.flipX/flipY; the integer member 
+negative/neg-stamp-boolean-reference-plus-malformed-assets-control	negative	params	entry.pxl,error	Stamp boolean reference plus malformed assets control	PXL001:A valid stamp boolean parameter leaves assets structural failure.
+negative/neg-literal-mirror-flip-plus-malformed-assets-control	negative	params	entry.pxl,error	Literal mirror flip plus malformed assets control	PXL001:Literal mirror flipX remains legal; assets array is the only error.
+negative/neg-undeclared-reference-before-explicit-null-assets	negative	params	entry.pxl,error	Undeclared reference before explicit null assets	PXL012:Stage P must complete before structure validation, including the early explicit-
+negative/neg-valid-reference-plus-explicit-null-assets-control	negative	params	entry.pxl,error	Valid reference plus explicit null assets control	PXL001:A successful parameter phase leaves null assets as a structural error.

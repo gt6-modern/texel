@@ -1,0 +1,76 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 16,
+  "height": 16,
+  "palette": [
+    "D1D1D1FF",
+    "BABABAFF",
+    "E8E8E8FF",
+    "DADADAFF",
+    "C7C7C7FF",
+    "E7E7E7FF",
+    "D9D9D9FF",
+    "B7B7B7FF",
+    "B5B5B5FF",
+    "B6B6B6FF",
+    "B8B8B8FF",
+    "C9C9C9FF",
+    "C4C4C4FF",
+    "D0D0D0FF",
+    "ECECECFF",
+    "C0C0C0FF",
+    "E4E4E4FF",
+    "BDBDBDFF",
+    "E0E0E0FF",
+    "CDCDCDFF",
+    "EDEDEDFF",
+    "CACACAFF",
+    "D8D8D8FF",
+    "E6E6E6FF",
+    "B9B9B9FF",
+    "C8C8C8FF",
+    "B2B2B2FF",
+    "F4F4F4FF",
+    "BCBCBCFF",
+    "B1B1B1FF",
+    "B3B3B3FF",
+    "F3F3F3FF",
+    "F2F2F2FF",
+    "BEBEBEFF",
+    "EAEAEAFF",
+    "D6D6D6FF"
+  ],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "grid",
+          "x": 0,
+          "y": 0,
+          "grid": [
+            "0123040566733008",
+            "1956AB3CD7700EF0",
+            "306670C00040EGH3",
+            "B0677000IJ430HA3",
+            "K040030ILA034M00",
+            "NOP0B340AA00P00K",
+            "LO0IIH4000B00M0Q",
+            "O06IL70RRS3MMM90",
+            "05L070MC9T0H9993",
+            "0LU000PM000M0003",
+            "4M0MII4MMM9M4MNN",
+            "PVWMHTM0H99M4MLX",
+            "MYS0M0ECM00MI0X0",
+            "5P00PMECM4ILT4M0",
+            "L4EZ4MC904IH0P06",
+            "9M0U000M0M000M0P"
+          ]
+        }
+      ]
+    }
+  ]
+}

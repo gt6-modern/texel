@@ -1,0 +1,20 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 1,
+  "height": 1,
+  "palette": [
+    "FFFFFFFF"
+  ],
+  "layers": [
+    "$n"
+  ],
+  "params": {
+    "n": {
+      "type": "integer",
+      "default": 0
+    }
+  },
+  "assets": []
+}

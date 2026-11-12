@@ -1,0 +1,1292 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 2048,
+  "height": 2048,
+  "palette": [
+    "FF0000FF"
+  ],
+  "layers": [
+    {
+      "name": "l000",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l001",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l002",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l003",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l004",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l005",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l006",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l007",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l008",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l009",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l010",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l011",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l012",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l013",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l014",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l015",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l016",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l017",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l018",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l019",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l020",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l021",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l022",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l023",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l024",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l025",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l026",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l027",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l028",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l029",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l030",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l031",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l032",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l033",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l034",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l035",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l036",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l037",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l038",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l039",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l040",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l041",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l042",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l043",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l044",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l045",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l046",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l047",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l048",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l049",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l050",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l051",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l052",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l053",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l054",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l055",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l056",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l057",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l058",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l059",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l060",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l061",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l062",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l063",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l064",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l065",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l066",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l067",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l068",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l069",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l070",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l071",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l072",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l073",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l074",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l075",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l076",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l077",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l078",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l079",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l080",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l081",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l082",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l083",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l084",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l085",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l086",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l087",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l088",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l089",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l090",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l091",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l092",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l093",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l094",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l095",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l096",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l097",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l098",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l099",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l100",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l101",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l102",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l103",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l104",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l105",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l106",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l107",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l108",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l109",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l110",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l111",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l112",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l113",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l114",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l115",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l116",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l117",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l118",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l119",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l120",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l121",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l122",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l123",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l124",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l125",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l126",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l127",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l128",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l129",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l130",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l131",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l132",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l133",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l134",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l135",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l136",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l137",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l138",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l139",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l140",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l141",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l142",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l143",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l144",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l145",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l146",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l147",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l148",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l149",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l150",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l151",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l152",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l153",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l154",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l155",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l156",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l157",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l158",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l159",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l160",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l161",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l162",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l163",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l164",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l165",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l166",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l167",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l168",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l169",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l170",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l171",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l172",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l173",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l174",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l175",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l176",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l177",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l178",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l179",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l180",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l181",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l182",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l183",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l184",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l185",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l186",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l187",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l188",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l189",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l190",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l191",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l192",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l193",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l194",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l195",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l196",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l197",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l198",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l199",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l200",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l201",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l202",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l203",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l204",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l205",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l206",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l207",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l208",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l209",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l210",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l211",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l212",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l213",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l214",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l215",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l216",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l217",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l218",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l219",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l220",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l221",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l222",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l223",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l224",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l225",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l226",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l227",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l228",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l229",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l230",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l231",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l232",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l233",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l234",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l235",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l236",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l237",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l238",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l239",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l240",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l241",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l242",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l243",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l244",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l245",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l246",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l247",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l248",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l249",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l250",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l251",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l252",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l253",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l254",
+      "blend": "normal",
+      "ops": []
+    },
+    {
+      "name": "l255",
+      "blend": "normal",
+      "ops": []
+    }
+  ]
+}

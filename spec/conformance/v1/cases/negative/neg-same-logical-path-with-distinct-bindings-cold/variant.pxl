@@ -1,0 +1,1 @@
+{"format": "PXL", "version": 1, "encoding": "char", "width": 1, "height": 1, "palette": ["FFFFFFFF"], "layers": [{"name": "b", "blend": "normal", "ops": [{"op": "stamp", "asset": "$choice", "x": 0, "y": 0}]}], "params": {"choice": {"type": "asset"}}, "assets": {"deep": {"kind": "pxl", "path": "s0.pxl"}, "short": {"kind": "pxl", "path": "last.pxl"}}}

@@ -1,0 +1,38 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "width": 1,
+  "height": 1,
+  "encoding": "char",
+  "palette": {
+    "fake": "FF0000FF"
+  },
+  "params": {
+    "n": {
+      "type": "integer",
+      "default": 0
+    },
+    "c": {
+      "type": "color",
+      "default": "FF0000FF"
+    },
+    "b": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "pixel",
+          "x": 0,
+          "y": 0,
+          "slot": 1
+        }
+      ]
+    }
+  ]
+}

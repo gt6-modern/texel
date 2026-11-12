@@ -1,0 +1,11 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "hex",
+  "width": 1,
+  "height": 1,
+  "palette": [
+    "FF0000FF"
+  ],
+  "layers": []
+}

@@ -1,0 +1,10 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 1,
+  "height": 1,
+  "params": { "flag": { "type": "boolean", "default": "false" } },
+  "palette": ["FFFFFFFF"],
+  "layers": [ { "name": "b", "blend": "normal", "ops": [ { "op": "fill", "slot": 1 } ] } ]
+}

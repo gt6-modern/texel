@@ -1,0 +1,1 @@
+{"format": "PXL", "version": 1, "encoding": "char", "width": 1, "height": 1, "params": {"k": {"type": "asset"}}, "palette": ["FFFFFFFF"], "assets": {"x": {"kind": "pxl", "path": "leaf.pxl"}, "s": {"kind": "pxl", "path": "leaf.pxl"}}, "layers": [{"name": "b", "blend": "normal", "ops": [{"op": "stamp", "asset": "$k", "x": 0, "y": 0}]}]}

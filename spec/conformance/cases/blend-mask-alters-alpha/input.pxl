@@ -1,0 +1,33 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 1,
+  "height": 1,
+  "palette": [
+    "445566FF",
+    "11223300"
+  ],
+  "layers": [
+    {
+      "name": "bottom",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "fill",
+          "slot": 1
+        }
+      ]
+    },
+    {
+      "name": "mask",
+      "blend": "mask",
+      "ops": [
+        {
+          "op": "fill",
+          "slot": 2
+        }
+      ]
+    }
+  ]
+}

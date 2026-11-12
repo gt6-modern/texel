@@ -1,0 +1,43 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 1,
+  "height": 1,
+  "palette": [
+    "FFFFFF01",
+    "FFFFFF80"
+  ],
+  "layers": [
+    {
+      "name": "bottom",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "fill",
+          "slot": 2
+        }
+      ]
+    },
+    {
+      "name": "over-normal",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "fill",
+          "slot": 1
+        }
+      ]
+    },
+    {
+      "name": "over-multiply",
+      "blend": "multiply",
+      "ops": [
+        {
+          "op": "fill",
+          "slot": 1
+        }
+      ]
+    }
+  ]
+}

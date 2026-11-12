@@ -1,0 +1,2 @@
+# name<TAB>entry<TAB>out<TAB>bindings（bindings 形如 a=1,b=B87333FF；无绑定写 -）
+demo	entry.pxl	build/textures/demo.png	-

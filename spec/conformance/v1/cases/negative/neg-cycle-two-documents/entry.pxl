@@ -1,0 +1,30 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 4,
+  "height": 4,
+  "palette": [
+    "FF0000FF"
+  ],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "stamp",
+          "asset": "b",
+          "x": 0,
+          "y": 0
+        }
+      ]
+    }
+  ],
+  "assets": {
+    "b": {
+      "kind": "pxl",
+      "path": "parts/b.pxl"
+    }
+  }
+}

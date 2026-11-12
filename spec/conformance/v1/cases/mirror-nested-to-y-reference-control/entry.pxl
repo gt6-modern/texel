@@ -1,0 +1,37 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 1,
+  "height": 1,
+  "palette": [
+    "FFFFFFFF"
+  ],
+  "layers": [
+    {
+      "name": "b",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "mirror",
+          "from": {
+            "x": 0,
+            "y": 0,
+            "w": 1,
+            "h": 1
+          },
+          "to": {
+            "x": 0,
+            "y": "$n"
+          }
+        }
+      ]
+    }
+  ],
+  "params": {
+    "n": {
+      "type": "integer",
+      "default": 0
+    }
+  }
+}

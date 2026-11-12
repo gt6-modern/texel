@@ -1,0 +1,21 @@
+name: Feature request
+description: Propose a scoped capability
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: "Please search existing issues and do not include secrets."
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Concrete use case
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior and alternatives
+    validations:
+      required: true

@@ -1,0 +1,16 @@
+{
+  "targets": [
+    {
+      "name": "copper",
+      "bindings": {
+        "base_color": "B87333FF"
+      }
+    },
+    {
+      "name": "iron",
+      "bindings": {
+        "base_color": "D8D8D8FF"
+      }
+    }
+  ]
+}

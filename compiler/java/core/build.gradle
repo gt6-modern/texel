@@ -1,0 +1,73 @@
+/*
+ * core：PXL 解析 / 渲染 / PNG 编解码。只允许 java.base，零依赖。
+ *
+ * 测试不是 JUnit：两个自带 main 的普通 Java 程序，由 JavaExec 跑。
+ *  - `unitTests`        —— 纯 Java 单元测试（不读语料）；
+ *  - `conformanceTests` —— 索引驱动的完整语料验收（正向 + 负向 + suite）。
+ */
+
+def repoRoot = rootProject.ext.repoRoot
+
+dependencies {
+    // 故意为空：core 不允许任何运行时依赖（AGENTS.md §4.1）。
+}
+
+tasks.register('unitTests', JavaExec) {
+    group = 'verification'
+    description = '跑 core 的内置单元测试（无第三方框架）'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.texel.core.UnitTestMain'
+}
+
+tasks.register('conformanceTests', JavaExec) {
+    group = 'verification'
+    description = '跑 spec/conformance 全部用例（正向 + 负向 + suite）'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.texel.core.ConformanceMain'
+    workingDir = repoRoot
+    systemProperty 'txel.repo', repoRoot.absolutePath
+    def testTmp = file("${rootProject.buildDir}/tmp/${name}")
+    doFirst { testTmp.mkdirs() }
+    systemProperty 'java.io.tmpdir', testTmp.absolutePath
+    // 抽取侧用例要调用既有 Python 抽取器；解释器由 -Ppython=... 覆盖。
+    systemProperty 'txel.python', (project.findProperty('python') ?: 'python').toString()
+}
+
+tasks.register('compilerTests', JavaExec) {
+    group = 'verification'
+    description = '跑当前 compiler 核心的单元测试（逻辑路径 / resolver / asset stamp / 依赖图 / 预算 / 清单）'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.texel.core.CompilerTestMain'
+    systemProperty 'txel.repo', repoRoot.absolutePath
+    def testTmp = file("${rootProject.buildDir}/tmp/${name}")
+    doFirst { testTmp.mkdirs() }
+    systemProperty 'java.io.tmpdir', testTmp.absolutePath
+}
+
+tasks.register('compilerCases', JavaExec) {
+    group = 'verification'
+    description = '跑 components 语料（graph / path / cycle / budget / params 等：graph / path / cycle / budget / params 等）'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.texel.core.CompilerConformanceMain'
+    workingDir = repoRoot
+    systemProperty 'txel.repo', repoRoot.absolutePath
+    def testTmp = file("${rootProject.buildDir}/tmp/${name}")
+    doFirst { testTmp.mkdirs() }
+    systemProperty 'java.io.tmpdir', testTmp.absolutePath
+}
+
+tasks.register('pngGate', JavaExec) {
+    group = 'verification'
+    description = '永久双路径 PNG 门禁（compiler 侧）：接受集与 Importer 一侧像素一致，拒绝集一律 PXL006'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.texel.core.PngGateMain'
+    workingDir = repoRoot
+    systemProperty 'txel.repo', repoRoot.absolutePath
+    def testTmp = file("${rootProject.buildDir}/tmp/${name}")
+    doFirst { testTmp.mkdirs() }
+    systemProperty 'java.io.tmpdir', testTmp.absolutePath
+}
+
+tasks.named('check') {
+    dependsOn 'unitTests', 'compilerTests', 'compilerCases', 'pngGate', 'conformanceTests'
+}

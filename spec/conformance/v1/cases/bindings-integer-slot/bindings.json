@@ -1,0 +1,16 @@
+{
+  "targets": [
+    {
+      "name": "red",
+      "bindings": {
+        "tint_slot": 1
+      }
+    },
+    {
+      "name": "green",
+      "bindings": {
+        "tint_slot": 2
+      }
+    }
+  ]
+}

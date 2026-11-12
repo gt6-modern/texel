@@ -1,0 +1,47 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "width": 1,
+  "height": 1,
+  "encoding": "char",
+  "palette": [
+    "FF0000FF"
+  ],
+  "params": {
+    "n": {
+      "type": "integer",
+      "default": 0
+    },
+    "c": {
+      "type": "color",
+      "default": "FF0000FF"
+    },
+    "b": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "stamp",
+          "asset": "a",
+          "x": 0,
+          "y": 0
+        }
+      ]
+    }
+  ],
+  "assets": {
+    "a": {
+      "kind": "pxl",
+      "path": "child.pxl",
+      "params": {
+        "n": "$n"
+      }
+    }
+  }
+}

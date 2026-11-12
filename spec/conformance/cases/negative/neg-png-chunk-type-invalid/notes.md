@@ -1,0 +1,21 @@
+# negative/neg-png-chunk-type-invalid
+
+- 形态:**负例**(§13.1)
+- **受测侧**:抽取侧(目录内只有 `input.png`,抽取器根本不读 PXL)
+- 受测输入:`input.png`
+- 期望错误码:`PXL006`(见 `expected.error`,一行 + LF)
+- 缺陷数量:1(§13.1 / README §2.2 要求一个目录只放一个缺陷)
+
+## 覆盖条款
+
+`§8.5`(chunk 类型名必须恰为 4 个 ASCII 字母)。
+
+## 缺陷(只有这一处)
+
+IHDR 之后插入类型名为 `teX1` 的 chunk:含数字 `1`。类型名含数字后,「首字母大小写区分 critical / ancillary」这个判据就没有定义了,故必须拒绝。与 `neg-png-chunk-reserved-bit`(四个字母但第三字节小写)区分。
+
+`input.png` 实测 **108 字节**;本目录没有 `input.pxl`,也没有任何期望像素文件。
+
+## 判据
+
+§13.2c:实现必须以 `PXL006` 失败,且**不产出任何输出文件**(不得留半份)。

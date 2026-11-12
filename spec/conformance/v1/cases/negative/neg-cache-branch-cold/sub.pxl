@@ -1,0 +1,1 @@
+{"format": "PXL", "version": 1, "encoding": "char", "width": 1, "height": 1, "palette": ["FFFFFFFF"], "assets": {"n": {"kind": "pxl", "path": "s0.pxl"}, "z_short": {"kind": "pxl", "path": "aa.pxl"}}, "layers": [{"name": "b", "blend": "normal", "ops": [{"op": "stamp", "asset": "n", "x": 0, "y": 0}, {"op": "stamp", "asset": "z_short", "x": 0, "y": 0}]}]}

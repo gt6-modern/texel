@@ -1,0 +1,156 @@
+case	source	form	size	colors	encoding	covers	input
+syn-1x1-transparent	synthetic	single	1x1	0	char	全图只有一个透明像素;palette 长度 0;抽取必须产出单条 fill slot=0;§4.5 的 n 最小情形	committed
+syn-1x1-opaque	synthetic	single	1x1	1	char	单像素单色;palette 长度 1;token 宽度最小值;§5.1 fill 的最小编码	committed
+syn-16x16-mono	synthetic	single	16x16	1	char	整图纯色必须压缩成单条 fill(AGENTS.md §3.3);压缩版与逐像素版像素必须相同	committed
+syn-16x16-tricolor	synthetic	single	16x16	3	char	三阶调色板按行优先首次出现顺序分配(§4.4);RUNNER 块与 GRID 块混合时的 op 顺序(附录 A)	committed
+syn-17x13-odd	synthetic	single	17x13	4	char	宽高皆为奇数、非 2 的幂;rect 越界裁剪(§5.0);行数非偶数时 GRID 块切分	committed
+syn-64x32-nonsquare	synthetic	single	64x32	8	char	非方形且宽大于高;rect 跨行垂直合并(附录 A 第 5 步);grid 行长 64	committed
+syn-16x512-strip	synthetic	single	16x512	6	char	帧带形态(高远大于宽);多块纵向切分;作为吞吐基线的输入	committed
+syn-300-gradient	synthetic	single	20x15	300	index4	n=300 强制跳过 index 档直接 index4(§4.5);4 位 token 零填充与大写	committed
+syn-tier-61	synthetic	single	61x1	61	char	§4.5 边界:恰好 61 色必须留在 char;slot 61 的 token 是字符集中的最后一个 a-y 的 y(§4.2)	committed
+syn-tier-62	synthetic	single	62x1	62	index	§4.5 边界:62 色必须升到 index;char 档物理上放不下第 62 个非透明色	committed
+syn-tier-255	synthetic	single	255x1	255	index	§4.5 边界:255 色仍在 index(透明 00 + 255 个非透明 slot 恰好用满 2 位十六进制)	committed
+syn-tier-256	synthetic	single	256x1	256	index4	§4.5 边界:256 色必须升到 index4;index 档 256 个值里有一个已被透明占用	committed
+syn-png-gray0	synthetic	single	16x16	4	char	色彩类型 0(8 bit 灰度)必须按 §8.2 展开成 r=g=b=样本、a=255;不是拒绝对象(§8.1)	committed
+syn-png-gray-trns	synthetic	single	16x16	2	char	色彩类型 0 + tRNS:命中灰度值的像素必须得 (g,g,g,0) —— 即 RGB 非零而 A=0,直接钉 §8.5 与 §7	committed
+syn-png-palette	synthetic	single	16x16	8	char	色彩类型 3 + PLTE、无 tRNS:按 PLTE 查表,a=255(§8.2)	committed
+syn-png-palette-trns	synthetic	single	16x16	5	char	色彩类型 3 + tRNS:索引落在 tRNS 范围内取该项 alpha,超出范围按 255(§8.2)	committed
+syn-png-gray-alpha	synthetic	single	16x16	6	char	色彩类型 4(灰度+alpha):r=g=b=样本 0,a=样本 1(§8.2)	committed
+syn-png-rgb-trns	synthetic	single	16x16	3	char	色彩类型 2 + tRNS:命中 RGB 三元组的像素得 alpha=0 且 RGB 原样保留(§8.5)	committed
+syn-png-two-text-chunks	synthetic	single	16x16	2	char	色彩类型 6 + 两条关键词不同的 tEXt:必须**接受**并产出与单条 tEXt 版本完全相同的 expected.pxl(§8.5 重复约束按"是否被读取"分类)。这条是上一条负例的对照——它证明"允许重复的 ancillary 不被误拒"	committed
+real-copper-billet	real	single	16x16	7	char	char 档真实素材;含 8 个 RGB 非零且 A=0 的边界像素 -> 钉 §7 与 §5.0	committed
+real-chain-overlay-dedupe	real	batch	16x16	1	char	去重:copper/chain_overlay.png 与 wood/chain_overlay.png 字节相同(SHA-256 前缀 9a8136434004ec3a,同组 40 条路径);同图多路径必须产出同一份 expected.pxl;批量形态见 §13.7(manifest + 每成员一目录 + `## aggregate`)	committed
+real-void-uniform-alpha0	real	single	16x16	1	char	全图 256 个像素均为 FFFFFF00。palette 必须长度 1 而非 0;回渲必须逐字节得到全 FFFFFF00 而非全 00000000 -> 钉 §6.3 的 aNum==0 分支与 §7。同一像素集的 void.png 与 chain_overlay.png 字节不同:钉 §10 只比像素	committed
+real-brick-blockdust	real	single	16x16	36	char	真实低色数素材:检验 rect 压缩不破坏像素(AGENTS.md §3.3)。注:实测 36 色且 256/256 全不透明,非 AGENTS.md 所写近单色	committed
+real-autoclave-front	real	single	16x16	147	index	中高色数真实素材落入 index 档(62 到 255);2 位大写十六进制 token;实测 147 色,256 个像素中 0 个 00000000、120 个 RGB 非零且 A=0、其余 136 个不透明。早前误记 186 色 / 188 个不可见像素,已按实测更正	committed
+real-dragonbreath	real	single	16x512	335	index4	n=335 强制 index4;真实帧带;AGENTS.md 写 336 色 = 335 + 透明 slot,用于核对 slot 计数口径	committed
+negative/neg-real-aerotheum-iccp-crc	real	single	-	-	-	PXL006(抽取侧):真实素材 aerotheum.png 的 iCCP chunk CRC 损坏(存储 96CEE38A,应为 927D9969),其余 chunk 全部正确、像素完好;§8.5 要求每个 chunk 的 CRC 都校验,故必须拒绝且不产出任何文件。该文件同时是 real-fluid-source-255 的 10 个已知缺陷成员之一(§13.7),本条是它的单例负例。iCCP+zTXt 的解码兼容性覆盖改由修复副本或合成用例承担(待 real- 落地)。注:实测 68 色(计透明 slot 为 69)→ index,非旧写的 5906 色	committed
+real-oil	real	single	16x512	11	char	无 iCCP 的对照样本;同样带 bKGD/pHYs/tIME,必须照样丢弃 ancillary 而像素不变	committed
+real-armor-hazard-0	real	single	64x32	14	char	64x32 非方形真实素材;1694 个 alpha=0 像素中大量 RGB 非零 -> 再钉 §7	committed
+real-fluid-source-255	real	batch	16x(16..512)	varying	char..index4	解码器回归:255 个 .png 中 245 个是往返正例,另 10 个因 iCCP chunk CRC 损坏(其余 chunk 全对、像素完好)按 §8.5 必须是 PXL006,登记为 §13.7 的「已知缺陷成员」;实测全部深度 8、非交错、色彩类型仅 6 与 2;批量形态见 §13.7,聚合判据为 245 + 10 = 255	committed
+real-item-material-family-400	real	batch	16x16	varying	char..index4	吞吐与去重统计:总文件数 8610,取前 400(AGENTS.md §7 第 10 行);实测 164 个同大小桶、最大同组 3045 个字节相同文件;批量形态见 §13.7(manifest + 每成员一目录 + `## aggregate`)	committed
+op-pixel	synthetic	single	16x16	2	char	pixel 单独成 op:单点写入、同一格被后继 pixel 覆盖、越界 pixel 为空操作(§5.3 与 §5.0)。此前漏了这条,八条图元里 pixel 无判定	committed
+op-line-bresenham	synthetic	single	16x16	2	char	line 八分圆:8 个方向各一条含两端点的线;钉附录规定的 Bresenham 逐像素集合,含 x0==x1、y0==y1 与单像素退化;并钉 line 不做反转对称归一(§5.4)	committed
+op-mirror-overlap	synthetic	single	16x16	2	char	mirror 快照语义:from 与 to 重叠、flipX 与 flipY 各一例;验证结果不依赖写入顺序;并钉 from 越界时源按透明 slot 0 参与(§5.6)	committed
+op-mirror-from-oob-transparent	synthetic	single	4x2	1	char	mirror 读侧越界必须写透明(v0 §5.6);GATE-4:先整幅 fill 不透明红再做 from(y=-1) 越界的 mirror,target 首行必须是 00000000	committed
+op-stamp-flip	synthetic	single	16x16	3	char	stamp 引用 sprites:flipX、flipY、两者同真三种情况;未被引用的 sprite 必须对输出无影响(§5.8)	committed
+op-erase-clip	synthetic	single	16x16	2	char	erase 清本层为 slot 0;负坐标与超边界的 x/y/w/h 必须裁剪而不报错(§5.0 与 §5.7)	committed
+op-coord-extreme	synthetic	single	16x16	2	char	§5.0 整数域上界:坐标取 ±65536、w/h 取 65536 的矩形与 line 必须正常裁剪并终止(步进轮数 <= 262145),越界一格即 PXL002(负例见 negative/)	committed
+blend-normal-a128	synthetic	single	2x2	2	char	normal 的 alpha=128 已算值:FF000080 over 0000FFFF 必须得 80007FFF(§6.6a);单图层 normal 恒等性(§6.7 第 1 条)	committed
+blend-multiply-a128	synthetic	single	2x2	2	char	multiply 的 alpha=128 已算值:80FF0080 over 112233FF 必须得 0D2219FF(§6.6b)	committed
+blend-mask-a128	synthetic	single	2x2	3	char	mask 的 alpha=128 已算值:00FF0080 over 112233FF 得 11223380;00FF0000 over 112233FF 得 11223300 不得折叠为 00000000(§6.6c/d)	committed
+blend-bound-overflow	synthetic	single	1x1	2	char	上界反例:源 FFFFFF01 合成到 FFFFFF80 必须得 FFFFFF80(§6.6g)。用先取整 ao 的旧写法会算出通道 256。钉住不许靠钳位补救、必须用未取整的 aNum 归一;normal 与 multiply 各一例。**注意**:白例单独看不出钳位(256 钳成 255 恰好等于正确值),真正的钳位识别由 `blend-formula-818181-normal` / `-multiply` 承担	committed
+blend-mask-alters-alpha	synthetic	single	1x1	2	char	mask 必须改下层 alpha:11223300 mask 到 445566FF 得 44556600;mask 作底层得 00000000 且不保留源 RGB。钉 §6.7 第 6 条按 blend 分别成立,防止把 mask 当成 normal	committed
+negative/neg-json-invalid	synthetic	single	-	-	-	PXL001(渲染侧):文本不是合法 JSON(截断的括号)	committed
+negative/neg-duplicate-key	synthetic	single	-	-	-	PXL001(渲染侧):同一对象内两个 width(§3.2)。不同解析器取首值/末值/报错,不钉死必分叉	committed
+negative/neg-unknown-field	synthetic	single	-	-	-	PXL001(渲染侧):顶层出现 §3.2 之外的字段	committed
+negative/neg-blend-invalid	synthetic	single	-	-	-	PXL001(渲染侧):blend = screen 不在三值内(§3.3 枚举)	committed
+negative/neg-layer-name-invalid	synthetic	single	-	-	-	PXL001(渲染侧):图层 name = Base 不匹配 [a-z][a-z0-9_-]*	committed
+negative/neg-layer-name-duplicate	synthetic	single	-	-	-	PXL001(渲染侧):两个图层同名 base(§3.3 要求在文档内唯一)	committed
+negative/neg-fill-extra-member	synthetic	single	-	-	-	PXL001(渲染侧):fill 多出 x 成员(已知 op 的参数集合与 §5 不一致)	committed
+negative/neg-grid-row-unequal	synthetic	single	-	-	-	PXL001(渲染侧):同一 grid 内两行字符数不等(§3.4)	committed
+negative/neg-grid-row-not-multiple	synthetic	single	-	-	-	PXL001(渲染侧):index 档下某行字符数为奇数,不是 token 宽度 2 的正整数倍(§3.4)	committed
+negative/neg-char-z	synthetic	single	-	-	-	PXL001(渲染侧):char 档用了保留字符 z(§4.2)	committed
+negative/neg-lowercase-hex	synthetic	single	-	-	-	PXL001(渲染侧):index 档 token 写成小写 0a(§4.3 要求大写)	committed
+negative/neg-encoding-unknown	synthetic	single	-	-	-	PXL003(渲染侧):encoding = hex(阶段 4,先于任何依赖 token 宽度的检查)	committed
+negative/neg-encoding-tier-mismatch	synthetic	single	-	-	-	PXL003(渲染侧):palette 长度 100 却声明 char(阶段 7,由 palette 长度派生档位)	committed
+negative/neg-size-width-zero	synthetic	single	-	-	-	PXL002(渲染侧):width = 0(§5.0 下界)	committed
+negative/neg-size-too-large	synthetic	single	-	-	-	PXL002(渲染侧):width = 70000(§5.0 上界)	committed
+negative/neg-width-not-integer	synthetic	single	-	-	-	PXL002(渲染侧):width = 1.5(数值域;类型类别本身是 number,故不是 PXL001)	committed
+negative/neg-coord-out-of-range	synthetic	single	-	-	-	PXL002(渲染侧):x = 99999 越出 §5.0 的 -65536..65536	committed
+negative/neg-rect-negative-w	synthetic	single	-	-	-	PXL002(渲染侧):rect 的 w = -1(§5.0 要求 w/h 为非负)	committed
+negative/neg-slot-non-integer	synthetic	single	-	-	-	PXL002(渲染侧):slot = 1.5(数值域)	committed
+negative/neg-grid-tokens-over-limit	synthetic	single	-	-	-	PXL002(渲染侧):某行 65537 个 token(§3.4 上界按 token 数计,不按字符数)	committed
+negative/neg-priority-002-over-003	synthetic	single	-	-	-	PXL002(渲染侧):同一文档既 width=0 又 encoding 与档位不符 —— 阶段 6 先于阶段 7,必须报 PXL002(钉 §11.1 阶段序)	committed
+negative/neg-unknown-op	synthetic	single	-	-	-	PXL004(渲染侧):op = circle 不在八条之内(参数集合已在阶段 3 查过,未知 op 无从查)	committed
+negative/neg-palette-missing-slot	synthetic	single	-	-	-	PXL005(渲染侧):palette 长度 2 而 token 指向 slot 5	committed
+negative/neg-palette-lowercase	synthetic	single	-	-	-	PXL005(渲染侧):palette 项写成小写 ff0000ff(§3.2 要求大写)	committed
+negative/neg-palette-contains-transparent	synthetic	single	-	-	-	PXL005(渲染侧):palette 含 00000000,与保留的透明 slot 冲突	committed
+negative/neg-stamp-missing-sprite	synthetic	single	-	-	-	PXL005(渲染侧):stamp 引用 sprites 中不存在的名字(§5.8)	committed
+negative/neg-bitdepth16	synthetic	single	-	-	-	PXL006(抽取侧):样本深度 16 的输入必须显式拒绝且不产出任何文件,不得静默降位深(§8.3)	committed
+negative/neg-bitdepth4	synthetic	single	-	-	-	PXL006(抽取侧):样本深度 4(索引) —— v0 有意不展开,属范围收窄(§8.3)	committed
+negative/neg-adam7	synthetic	single	-	-	-	PXL006(抽取侧):交错(Adam7)输入(§8.1)	committed
+negative/neg-png-ct5	synthetic	single	-	-	-	PXL006(抽取侧):色彩类型 5 —— 非法或未定义类型(§8.1)	committed
+negative/neg-png-index-beyond-plte	synthetic	single	-	-	-	PXL006(抽取侧):色彩类型 3 的样本索引 >= PLTE 项数;不得钳位或环绕(§8.5)	committed
+negative/neg-png-crc	synthetic	single	-	-	-	PXL006(抽取侧):IDAT 的 CRC 被破坏 —— 必须校验 CRC(§8.5)	committed
+negative/neg-png-inflated-too-long	synthetic	single	-	-	-	PXL006(抽取侧):IDAT 解压后比 height*(1+stride) 多出字节;不得只取前若干行(§8.5)	committed
+negative/neg-png-trns-bad-length	synthetic	single	-	-	-	PXL006(抽取侧):色彩类型 0 的 tRNS 长度为 3(必须恰为 2 字节,§8.5)	committed
+negative/neg-bitdepth1	synthetic	single	-	-	-	PXL006(抽取侧):样本深度 1(§8.3 范围收窄)	committed
+negative/neg-bitdepth2	synthetic	single	-	-	-	PXL006(抽取侧):样本深度 2(§8.3 范围收窄)	committed
+negative/neg-png-size-over-limit	synthetic	single	-	-	-	PXL006(抽取侧):width=70000 超过 §5.0.1 的 65536 上界 —— 输入侧就必须拒绝,不能等抽完再撞 PXL002(§8.3)	committed
+negative/neg-png-area-over-limit	synthetic	single	-	-	-	PXL006(抽取侧):面积 4,196,352 超过 §5.0.2 的 2^22 上界。宽高各自合法但乘积不合法,专门钉面积上界	committed
+negative/neg-png-filter-illegal	synthetic	single	-	-	-	PXL006(抽取侧):某行过滤器字节为 5 —— 必须只接受 0..4(§8.5)	committed
+negative/neg-png-idat-noncontiguous	synthetic	single	-	-	-	PXL006(抽取侧):两块 IDAT 之间夹了一个 ancillary chunk —— IDAT 必须连续(§8.5)	committed
+negative/neg-png-duplicate-chunk	synthetic	single	-	-	-	PXL006(抽取侧):出现两块 PLTE(被读取的 chunk,至多一个)。注意不能用 pHYs/tEXt 之类 ancillary 构造此例——它们重复是合法的(§8.5)	committed
+negative/neg-png-unknown-critical	synthetic	single	-	-	-	PXL006(抽取侧):出现未知 critical chunk(首字母大写)—— 必须拒绝,不得当 ancillary 跳过(§8.5)	committed
+negative/neg-png-inflated-too-short	synthetic	single	-	-	-	PXL006(抽取侧):IDAT 解压后比 height*(1+stride) 少字节 —— 不得补零、不得只画前若干行(§8.5)	committed
+negative/neg-png-zlib-adler	synthetic	single	-	-	-	PXL006(抽取侧):zlib 流 Adler-32 校验失败 —— 必须校验(§8.5)	committed
+negative/neg-png-zlib-trailing	synthetic	single	-	-	-	PXL006(抽取侧):zlib 流正常结束后还有多余字节 —— 必须拒绝,不得静默忽略(§8.5)	committed
+negative/neg-size-area-over-limit	synthetic	single	-	-	-	PXL002(渲染侧):文档 width=2049、height=2048 各自合法,乘积 4,196,352 超过 §5.0.2 的 2^22。文档本身极小(width/height 只是声明,ops 为空),专测阶段 6 的**文档侧**面积检查	committed
+negative/neg-layers-over-limit	synthetic	single	-	-	-	PXL002(渲染侧):257 个图层超过 §5.0.2 的 256 上限。每层 ops 为空,文件很小,专测图层数上界	committed
+negative/neg-sprite-name-invalid	synthetic	single	-	-	-	PXL001(渲染侧):sprites 的成员名为 Bad_Name,不匹配 [a-z][a-z0-9_-]*(§3.7)。此前 PXL001 只列了图层名,这条补上 sprite 名	committed
+negative/neg-png-iend-crc	synthetic	single	-	-	-	PXL006(抽取侧):IEND 的 CRC 被破坏。§8.5 明写 CRC 校验"包括 IEND",而 neg-png-crc 只破坏了 IDAT,不能替它作证	committed
+negative/neg-palette-overflow	synthetic	single	-	-	-	PXL005(抽取侧):256x256 共 65536 像素,每个都是不同的非透明 RGBA 值(alpha 恒为 255,故无 00000000),去重后 n = 65536 大于 index4 容量 65535。尺寸与面积都合规,只能由抽取器报 PXL005 —— 因此本目录只有 input.png,没有 input.pxl(§13.1 侧别规则)	committed
+syn-ops-fallback	synthetic	single	65535x4	2	char	ops 上界边界:65535x4 双色,每行段宽恒为 3、相邻行反色 —— 四行都是 RUNNER 且上下不可合并,附录 A 的常规输出是 21845x4 = 87380 条 rect,超过每层 32,768。必须触发附录 A 第 8 步的全局回退,整层退化成一条 grid。钉住"接受的 PNG 一定能抽成合法 PXL"(§5.0.2 不变量)	committed
+syn-grid-large-index4	synthetic	single	512x512	256	index4	大文档侧的常规边界:256 色强制 index4,全 GRID。钉住"全 GRID + 4 位 token"路径在大尺寸下仍落在 §5.0.2 的文档字节与 ops 上界内;相对 2^22 面积上限留 8 倍余量,可入库	committed
+negative/neg-resource-layers-times-area	synthetic	single	-	-	-	PXL002(渲染侧):256 个图层 x 2048x2048 = 2^30 像素,超过 §5.0.2 的"图层数 x 面积 <= 2^24"。**单独每一项都合规**:面积恰为 2^22 上限、图层数恰为 256 上限——只有乘积超限。文档本身很小(每层 ops 为空),专测乘积这条	committed
+negative/neg-resource-ops-over-limit	synthetic	single	-	-	-	PXL002(渲染侧):单层 32769 条 op,超过 §5.0.2 的每层 32,768 上限。生成后精确 **2,130,209 字节(2.03 MiB)**,低于 §13.6 的 4 MiB 阈值,因此**必须入库**,不走生成路径(早前误标为约 3.9 MB 并声称不入库,已按实算更正)	committed
+negative/neg-resource-sprites-over-limit	synthetic	single	-	-	-	PXL002(渲染侧):`sprites` 有 4097 项,超过 §5.0.2 的 4096 上限。每个 sprite 只有一行,fixture 约 61 KB	committed
+negative/neg-resource-sprite-rows-over-limit	synthetic	single	-	-	-	PXL002(渲染侧):单个 sprite 有 65537 行,超过 §5.0.2 的 65536 行上限。fixture 约 400 KB	committed
+negative/neg-doc-too-large	synthetic	single	-	-	-	PXL002(渲染侧):文档 UTF-8 字节数超过 64 MiB。构造:4096 个 sprite,每个 1488 行 —— sprite 项数 4096 与每 sprite 行数 1488 都合规,只有总字节超限,这正是"字节上限必须独立存在"的理由。按 §3.7 规范形式实测 **67,129,581 字节(64.02 MiB)**,刚越过 64 MiB(超出 20,717 字节);模型已用 4 个样本与真实序列化逐字节校验。按 §13.6 属生成型、不入库	generated
+negative/neg-priority-002-over-003-layers	synthetic	single	-	-	-	PXL002(渲染侧):同一文档既 257 个图层(阶段 6)又 encoding 与派生档位不符(阶段 7),必须报阶段更早的 PXL002。钉住资源上界确实归在阶段 6,而不是被更晚的 PXL003 抢走	committed
+negative/neg-png-chunk-length-high-bit	synthetic	single	-	-	-	PXL006(抽取侧):某 chunk 的长度字段最高位为 1(即数值 > 2,147,483,647),§8.5 要求拒绝。这是无符号/有符号读取的分叉点:按无符号 32 位读是一个荒谬的大长度,按有符号读则是负数——两种错法不同,但都必须被同一条规则挡住	committed
+negative/neg-png-chunk-truncated	synthetic	single	-	-	-	PXL006(抽取侧):某 chunk 声明的长度超过文件剩余字节数。§8.5 明写不得把"长度越过文件尾"当成"读到文件结束";这条钉住截断文件必须被拒,而不是被静默当成合法	committed
+negative/neg-png-chunk-type-invalid	synthetic	single	-	-	-	PXL006(抽取侧):某 chunk 的类型名含数字(如 teX1),§8.5 要求类型名恰为 4 个 ASCII 字母且第三字节保留位为 0。不钉这条,首字母区分 critical/ancillary 这个判据遇到含数字的类型名就会失效	committed
+negative/neg-grid-empty-array	synthetic	single	-	-	-	PXL001(渲染侧):`"grid": []` —— 行数组为空。§3.4 要求至少 1 行;不存在"0 行矩形",不得当成 no-op	committed
+negative/neg-grid-empty-row	synthetic	single	-	-	-	PXL001(渲染侧):`"grid": [""]` —— 单行为空串。§3.4 要求每行至少 1 个 token;不存在"0 列矩形",不得当成 no-op	committed
+negative/neg-sprite-empty-array	synthetic	single	-	-	-	PXL001(渲染侧):`"sprites": {"s": []}` —— sprite 的行数组为空。与 `neg-grid-empty-array` 同一条规则,单独立项是因为 sprite 走另一条读取路径(§3.7 / §5.8)	committed
+negative/neg-priority-001-over-003-empty-grid	synthetic	single	-	-	-	PXL001(渲染侧):同一文档既 `grid: []`(阶段 3)又 `encoding` 不是三值之一(阶段 4),必须报阶段更早的 PXL001。钉住"行数组非空"确实归阶段 3,而不是被 PXL003 抢走	committed
+negative/neg-priority-001-over-003-uneven-grid	synthetic	single	-	-	-	PXL001(渲染侧):同一文档既两行长度不等(阶段 3)又 `encoding` 未知(阶段 4),必须报 PXL001。钉住"各行等长"同样归阶段 3——它不需要 token 宽度	committed
+negative/neg-priority-004-over-002-unknown-op	synthetic	single	-	-	-	PXL004(渲染侧):`{"op": "circle", "x": 99999}` —— 未知 op 附带越界坐标。按 §11.1,op 级数值检查只适用于八条已知图元,`x` 不被检查,故阶段 6 不报 PXL002,统一在阶段 8 报 PXL004	committed
+negative/neg-priority-004-over-001-unknown-op-grid	synthetic	single	-	-	-	PXL004(渲染侧):未知 op 带一个形似 `grid` 的成员、且其各行长度不等。§3.4 的行数组规则只作用于已知 `grid` op 的 `grid` 字段与 `sprites` 的值,未知 op 的这个成员不是"token 行数组",故阶段 3 不报 PXL001,统一报 PXL004	committed
+negative/neg-priority-001-over-004-unknown-op-duplicate-key	synthetic	single	-	-	-	PXL001(渲染侧):`{"op":"circle","x":1,"x":2}` —— 未知 op 且同一对象内 `x` 重复。按 §11.1,成员名重复是**通用对象检查**,阶段 3 就报 PXL001;未知 op 只跳过 op 专属检查,不影响这一条。钉住"跳过范围只限 op 专属"	committed
+negative/neg-format-invalid	synthetic	single	-	-	-	PXL001(渲染侧):`"format": "OTHER"` —— 字段存在、类型是字符串,但值不等于 `PXL`。§3.2 要求恒为 `PXL`,阶段 3 报 PXL001。此前这一条没有任何拒绝规则接住(只看"字段是否存在、类型是否对"会漏掉它)	committed
+negative/neg-palette-nonstring	synthetic	single	-	-	-	PXL001(渲染侧):`palette: [123]` —— 项不是字符串。§3.2 定义 `palette` 为 `array of string`,故这是阶段 3 的**类型类别**错误;`PXL005` 只管"是字符串但格式/容量不对",两者不重叠	committed
+negative/neg-palette-over-capacity	synthetic	single	-	-	-	PXL005(渲染侧):`palette` 长度 65536(恰好等于 index4 值域总数)。§4.5 明写 `n >= 65536` 无档位可派生,故阶段 7 被跳过,直接由阶段 9 报 PXL005。fixture 约 1.1 MB,低于 4 MiB 阈值,入库	committed
+negative/neg-priority-005-over-003-palette-capacity	synthetic	single	-	-	-	PXL005(渲染侧):`palette` 长度 65536 且 `encoding` 声明为 `char`。若阶段 7 照常执行,会因档位不符报 PXL003;但 `n >= 65536` 时阶段 7 **被跳过**,必须报 PXL005。钉住阶段 7 的前置条件	committed
+negative/neg-layers-empty	synthetic	single	-	-	-	PXL001(渲染侧):`layers: []` —— 数组非空要求属**结构**,归阶段 3。注意与 `neg-layers-over-limit`(257 层 → PXL002 阶段 6)区分:那是数量超限,这是缺了必需内容	committed
+negative/neg-priority-001-over-003-empty-layers	synthetic	single	-	-	-	PXL001(渲染侧):`layers: []`(阶段 3)与未知 `encoding`(阶段 4)同时存在,必须报 PXL001	committed
+negative/neg-width-not-integer-precise	synthetic	single	-	-	-	PXL002(渲染侧):`width: 1.0000000000000001`。按原始词法精确十进制判断,它不等于 1,是 PXL002;而双精度解析会舍成 `1.0` 误接受。钉 §3.8 的精确判定要求	committed
+negative/neg-png-plte-after-idat	synthetic	single	-	-	-	PXL006(抽取侧):chunk 顺序为 `IHDR → IDAT → PLTE → IEND`,CRC 全部正确。§8.5 要求 `PLTE` 早于第一个 `IDAT`;不写这条,"先收全文件再解码"与"流式解码"会分叉	committed
+negative/neg-png-ihdr-length	synthetic	single	-	-	-	PXL006(抽取侧):IHDR 的 chunk 数据长度不是 13 字节。§8.5 要求恰为 13	committed
+negative/neg-png-iend-length	synthetic	single	-	-	-	PXL006(抽取侧):IEND 的 chunk 数据长度不是 0。§8.5 要求恰为 0	committed
+op-numeric-literal-forms	synthetic	single	2x2	2	char	仅渲染正例:`width` / `height` / `x` / `y` / `slot` 等整数成员写成 `2.0` 这类等值小数字面量,必须被接受(§3.8)。与 `neg-width-not-integer-precise` 成对:一个钉"等值形式要接受",一个钉"不相等的十进制不得舍入后接受"	committed
+blend-invisible-stack-upper-wins	synthetic	single	1x1	2	char	仅渲染正例:下层 `FFFFFF00`、上层 `FF000000`(两者都是"RGB 非零而 A=0")。按 §6.3 的公式与 §7 的传播规则,结果是**上层** `FF000000`。此前 §7 的散文只说"保留下层",与公式矛盾	committed
+blend-invisible-stack-transparent-top	synthetic	single	1x1	1	char	仅渲染正例:下层 `FFFFFF00`、上层是全透明槽 `00000000`。上层没有颜色可给,结果是 `FFFFFF00`(§6.6e)。与上一条配对,钉住"有颜色者胜"的两个分支	committed
+negative/neg-png-bad-signature	synthetic	single	-	-	-	PXL006(抽取侧):文件前 8 字节不是 PNG 签名 `89 50 4E 47 0D 0A 1A 0A`。§8.5 明写签名与 CRC、chunk 结构一并校验	committed
+negative/neg-png-missing-iend	synthetic	single	-	-	-	PXL006(抽取侧):没有 `IEND`。§8.5 要求 IEND 恰好一个且排在最后	committed
+negative/neg-png-data-after-iend	synthetic	single	-	-	-	PXL006(抽取侧):`IEND` 之后还有字节。§8.5 明写 IEND 之后不得有任何字节,不得静默忽略	committed
+negative/neg-png-missing-idat	synthetic	single	-	-	-	PXL006(抽取侧):没有 `IDAT`。§8.5 要求至少一块 IDAT	committed
+negative/neg-png-ihdr-compression-method	synthetic	single	-	-	-	PXL006(抽取侧):IHDR 的压缩方法字段为 1。§8.5 要求必须为 0(该字段只定义过 0)	committed
+negative/neg-png-ihdr-filter-method	synthetic	single	-	-	-	PXL006(抽取侧):IHDR 的过滤方法字段为 1。§8.5 要求必须为 0	committed
+negative/neg-png-palette-missing-plte	synthetic	single	-	-	-	PXL006(抽取侧):色彩类型 3 却没有 `PLTE`。§8.5 要求类型 3 必须有 PLTE	committed
+negative/neg-png-plte-forbidden-gray	synthetic	single	-	-	-	PXL006(抽取侧):色彩类型 0(灰度)带了 `PLTE`。§8.5 要求类型 0 / 4 不得有 PLTE	committed
+negative/neg-png-trns-forbidden-rgba	synthetic	single	-	-	-	PXL006(抽取侧):色彩类型 6(RGBA)带了 `tRNS`。§8.5 要求类型 4 / 6 出现 tRNS 即拒绝	committed
+negative/neg-png-chunk-reserved-bit	synthetic	single	-	-	-	PXL006(抽取侧):某 chunk 类型名为 `tExt` —— 四个字节全是字母,但**第三字节小写**,即保留位为 1。§8.5 要求第三个字节必须大写。注意与 `neg-png-chunk-type-invalid`(类型名含数字)区分:那条只测"非字母",测不到保留位	committed
+syn-png-unknown-ancillary	synthetic	single	16x16	2	char	往返正例:色彩类型 6 + 一个**未知 ancillary chunk**(类型名 `prVt`,首字母小写)。§8.5 要求未知 ancillary 一律接受并忽略其内容,故产出必须与不带该 chunk 时**逐字节相同**的 expected.pxl	committed
+blend-transparent-identity-normal	synthetic	single	1x1	1	char	仅渲染正例:下层 `FFFFFF00`、上层是全透明槽、`blend: normal`。透明槽源必须**完全恒等**,结果 `FFFFFF00`(§6.7 第 2 条)	committed
+blend-transparent-identity-multiply	synthetic	single	1x1	1	char	仅渲染正例:同上但 `blend: multiply`。透明槽源在 multiply 下同样完全恒等(§6.3/§6.4 的透明源分支),结果 `FFFFFF00`	committed
+blend-transparent-identity-mask	synthetic	single	1x1	1	char	仅渲染正例:同上但 `blend: mask`。透明槽源由 §6.5 第一个分支直接返回下层,结果 `FFFFFF00`	committed
+blend-normal-opaque-wins	synthetic	single	1x1	2	char	仅渲染正例:`normal` 下 `sa = 255` 的全不透明上层覆盖任何下层,结果恒等于上层源值且 `ao = 255`(§6.7 第 3 条)。下层取一个 alpha 非 255 的值,确保不是靠巧合通过	committed
+blend-multiply-bottom-black	synthetic	single	1x1	2	char	仅渲染正例:`multiply` 图层作**底层**(下层为空、`dc = 0`),任何不透明源都乘成黑:源 `FF0000FF` → 结果 `000000FF`(§6.7 第 4 条)。这条钉住"multiply 不是覆盖",防止实现为它加特例	committed
+negative/neg-size-area-overflow-32bit	synthetic	single	-	-	-	PXL002(渲染侧):`width` 与 `height` 都取合法上界 65536,乘积 `4,294,967,296` **超过 2^31-1**。用 32 位算会回绕成 0,从而"通过"面积检查。§5.0.1 要求资源校验用 64 位或防溢出比较。fixture 极小(两个数字),不必真画 43 亿像素	committed
+negative/neg-sprite-slot-out-of-range	synthetic	single	-	-	-	PXL005(渲染侧):`palette: []`、`sprites: {"s": ["0"]}`、唯一图层 `ops: []`,且**没有任何 `stamp` 引用该 sprite**。字符 `0` 合法,但指向 slot 1,而 palette 长度为 0。§11.1 阶段 9 要求校验**所有** sprite 定义,未引用不等于不校验	committed
+negative/neg-token-nbsp	synthetic	single	-	-	-	PXL001(渲染侧):grid 行内含一个 U+00A0(非断行空格)。§3.4 只允许 §4.2 / §4.3 枚举出的字符,不得用宿主语言的"是否为空白"分类判定——不同实现对 U+00A0 的分类不同	committed
+negative/neg-priority-003-over-001-nbsp	synthetic	single	-	-	-	PXL003(渲染侧):`encoding` 未知**且** grid 行内含 U+00A0。字符合法性依赖档位,故归阶段 5;阶段 4 先命中,必须报 PXL003 而不是 PXL001	committed
+negative/neg-png-trns-before-plte	synthetic	single	-	-	-	PXL006(抽取侧):chunk 顺序 `IHDR → tRNS → PLTE → IDAT → IEND`,CRC 与像素数据全对。§8.5 要求存在 PLTE 时 tRNS 必须晚于 PLTE、早于首个 IDAT	committed
+blend-formula-818181-normal	synthetic	single	1x1	2	char	仅渲染正例:源 `81818101` over 目标 `81818180`。正确结果 `81818180`;旧公式(先取整 ao 再归一)给 `82828280`。与 `blend-bound-overflow` 的白例互补:白例的 256 钳成 255 恰好等于正确值,**看不出钳位**;这一例即使不发生越界也与正确值不同,才真正钉住"必须用 aNum 归一"	committed
+blend-formula-818181-multiply	synthetic	single	1x1	2	char	仅渲染正例:源 `FFFFFF01` over 目标 `81818180`,`blend: multiply`。`mc = div255(255*129) = 129`,退化为与上一条相同的算术:正确 `81818180`,旧公式 `82828280`	committed
+negative/neg-numeric-slot-out-of-palette	synthetic	single	-	-	-	PXL005(渲染侧):`palette` 只有 1 项,而 `fill` 的 `slot` 写成 2 —— 这个数**不经过 token 解码**,阶段 6 只判它是不是 0..65535 的整数(是),判不出它越过 `palette` 长度。§11.1 阶段 9 必须单独接收"已知 op 的数值 slot"这一类	committed
+negative/neg-priority-001-over-003-codepoint-length	synthetic	single	-	-	-	PXL001(渲染侧):`encoding` 未知(阶段 4 会报 PXL003),同时 grid 为 `["\uD83D\uDE00", "00"]`。按**码点**计长度为 1 与 2,不等长属阶段 3,必须先报 PXL001;若按 UTF-16 代码单元计是 2 与 2,就会滑到阶段 4 报 PXL003。钉住 §3.4 的计数单位	committed
+op-lenient-bom-crlf	synthetic	single	2x2	2	char	仅渲染正例:`input.pxl` 带 UTF-8 BOM、所有换行为 CRLF、结尾无换行符。§3.8 要求渲染器接受这三点;一个只吃"无 BOM + LF + 有结尾换行"的实现必须在此失败	committed
+op-lenient-structure	synthetic	single	2x2	2	char	仅渲染正例:成员顺序打乱;缩进分别用 4 空格、**2 个 tab**、空格与 tab 混用;**至少两行带行尾空白**(空格与 tab 各一);冒号后多个空格;`flipX` 显式写成 `false`;`width` / `height` 写成 `2.0`。§3.8 要求"任意缩进、任意行尾空白"全部接受——只接受 4 空格缩进、拒绝 tab 与行尾空格的解析器必须在此失败	committed
+negative/neg-version-out-of-long-range	synthetic	single	-	-	-	PXL001(渲染侧): version 写成 2^63 —— 词法是整数但超出 64 位可表示范围;只用「整数值 == 0」判定会把无法表示的值读成 0 从而误接受。钉 §12 的 fail-closed 与 §3.8 的精确词法判定	committed
+negative/neg-sprite-tokens-over-limit	synthetic	single	-	-	-	PXL002(渲染侧):一个 sprite 的单行有 65537 个 token,超过 65536 上界。§3.4 的 token 数上界适用于凡出现 token 行数组的地方(grid 字段与 sprites 的每个值),只查 grid 会与独立实现分叉	committed
+syn-png-gray-trns-highbyte	synthetic	single	16x16	2	char	色彩类型 0 + tRNS 但**高字节非 0**(`0180`):按 PNG 第三版 §11.3.2.1 必须**先按样本深度掩掉高位**再比较,于是样本 `0x80` 仍然命中、得到 `(128,128,128,0)`。早前规范写"按 16 位整值比较"(0x0180 ≠ 0x80、不命中),与 PNG 标准冲突,已更正	committed
+negative/neg-resource-raster-budget	synthetic	single	-	-	-	PXL002(渲染侧):2048×2048(面积恰好等于上界)+ 两条全画布 rect。面积、图层数、每层 ops 三个上限各自合法,但裁剪后的像素写入累计 8,388,608,超过 §5.0.2 的 2^22 光栅工作预算	committed

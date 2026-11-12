@@ -1,0 +1,102 @@
+/* Shared Java 8 and Maven Central publication configuration. */
+
+ext.repoRoot = rootProject.projectDir.parentFile.parentFile
+ext.releaseVersion = rootProject.ext.repoRoot.toPath().resolve('VERSION').toFile().getText('UTF-8').trim()
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'maven-publish'
+    apply plugin: 'signing'
+
+    group = 'io.github.gt6-modern'
+    version = rootProject.ext.releaseVersion
+
+    java {
+        withSourcesJar()
+        withJavadocJar()
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.release = 8
+        options.encoding = 'UTF-8'
+        options.compilerArgs += ['-Xlint:all,-serial,-processing,-options']
+    }
+
+    tasks.withType(Javadoc).configureEach {
+        options.encoding = 'UTF-8'
+        options.charSet = 'UTF-8'
+        options.addStringOption('Xdoclint:none', '-quiet')
+    }
+
+    tasks.named('test') {
+        enabled = false
+    }
+
+    repositories {
+        // Production code has no external dependency. Publication plugins are built into Gradle.
+    }
+
+    publishing {
+        publications {
+            mavenJava(MavenPublication) {
+                from components.java
+                artifactId = 'texel-' + project.name
+                pom {
+                    name = 'Texel ' + project.name
+                    description = project.name == 'core'
+                            ? 'Deterministic, embeddable PXL compiler'
+                            : 'Command-line compiler for PXL pixel assets'
+                    url = 'https://github.com/gt6-modern/texel'
+                    licenses {
+                        license {
+                            name = 'Apache License, Version 2.0'
+                            url = 'https://www.apache.org/licenses/LICENSE-2.0.txt'
+                            distribution = 'repo'
+                        }
+                    }
+                    developers {
+                        developer {
+                            id = 'gt6-modern'
+                            name = 'GT6 Modern contributors'
+                            url = 'https://github.com/gt6-modern'
+                        }
+                    }
+                    scm {
+                        connection = 'scm:git:https://github.com/gt6-modern/texel.git'
+                        developerConnection = 'scm:git:ssh://git@github.com/gt6-modern/texel.git'
+                        url = 'https://github.com/gt6-modern/texel'
+                    }
+                }
+            }
+        }
+        repositories {
+            maven {
+                name = 'centralStaging'
+                url = uri(rootProject.layout.buildDirectory.dir('central-staging'))
+            }
+        }
+    }
+
+    def signingKey = providers.gradleProperty('signingKey').orElse(
+            providers.environmentVariable('MAVEN_GPG_PRIVATE_KEY'))
+    def signingPassword = providers.gradleProperty('signingPassword').orElse(
+            providers.environmentVariable('MAVEN_GPG_PASSPHRASE'))
+    signing {
+        required { signingKey.isPresent() }
+        if (signingKey.isPresent()) {
+            useInMemoryPgpKeys(signingKey.get(), signingPassword.getOrElse(''))
+            sign publishing.publications.mavenJava
+        }
+    }
+}
+
+apply from: rootProject.file('discipline.gradle')
+
+tasks.register('centralBundle', Zip) {
+    group = 'publishing'
+    description = 'Build the repository-layout bundle consumed by Maven Central Portal.'
+    dependsOn subprojects.collect { it.tasks.named('publishMavenJavaPublicationToCentralStagingRepository') }
+    archiveFileName = 'texel-' + rootProject.ext.releaseVersion + '-central.zip'
+    destinationDirectory = layout.buildDirectory.dir('distributions')
+    from layout.buildDirectory.dir('central-staging')
+}

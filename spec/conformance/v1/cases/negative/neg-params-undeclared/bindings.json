@@ -1,0 +1,10 @@
+{
+  "targets": [
+    {
+      "name": "main",
+      "bindings": {
+        "unknown_color": "00FF00FF"
+      }
+    }
+  ]
+}

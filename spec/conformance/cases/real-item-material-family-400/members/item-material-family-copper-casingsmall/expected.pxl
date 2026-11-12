@@ -1,0 +1,76 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 16,
+  "height": 16,
+  "palette": [
+    "FFFFFF00",
+    "D6D6D6FF",
+    "F6F6F6FF",
+    "F4F4F4FF",
+    "E8E8E8FF",
+    "F2F2F2FF",
+    "EFEFEFFF",
+    "F5F5F5FF",
+    "87878700",
+    "F3F3F3FF",
+    "E9E9E9FF",
+    "ECECECFF",
+    "B8B8B800",
+    "E7E7E7FF",
+    "F1F1F1FF",
+    "EDEDEDFF",
+    "F0F0F0FF",
+    "EEEEEEFF",
+    "EAEAEAFF",
+    "EBEBEBFF",
+    "A3A3A300",
+    "D7D7D7FF"
+  ],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 0,
+          "w": 16,
+          "h": 1,
+          "slot": 1
+        },
+        {
+          "op": "grid",
+          "x": 0,
+          "y": 1,
+          "grid": [
+            "0111111111011110",
+            "0122222341015610",
+            "0122227641819A10",
+            "0122273B41C13D10",
+            "01332EEF41C1GA10",
+            "01H5GE6441C16D10",
+            "0166BHA441C1AA10",
+            ".14IJA4441C1441.",
+            ".111111111C1111.",
+            "..8CCCCCCCCKK8..",
+            ".1111111111111..",
+            ".1222253EH4441..",
+            ".12222EAJA4441..",
+            ".1111111L11111.."
+          ]
+        },
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 15,
+          "w": 16,
+          "h": 1,
+          "slot": 0
+        }
+      ]
+    }
+  ]
+}

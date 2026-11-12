@@ -1,0 +1,33 @@
+{
+	"layers": [
+        {
+ 	 "ops": [
+                {
+                    "op": "fill",
+                    "slot": 1
+                },
+            {
+              "op": "pixel",
+              "x": 0.0,
+              "y": 0.0,
+              "slot": 2.0
+            },   
+            {
+              "op": "mirror",
+              "from": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
+              "to": {"x": 1.0, "y": 1.0},
+              "flipX": false,
+              "flipY":   false
+            }	
+ 	 ],
+   "blend": "normal",
+	 "name": "base"
+        }
+    ],
+  "palette": ["FF0000FF", "00FF00FF"],
+  "height": 2.0,
+  "width":   2.0,
+ "encoding": "char",
+   "version": 1,
+"format": "PXL"
+}

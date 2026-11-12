@@ -1,0 +1,36 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 1,
+  "height": 1,
+  "palette": [
+    "FFFFFFFF"
+  ],
+  "layers": [
+    {
+      "name": "b",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "line",
+          "from": {
+            "x": 0,
+            "y": 0
+          },
+          "to": {
+            "x": 0,
+            "y": 0
+          },
+          "slot": 1
+        }
+      ]
+    }
+  ],
+  "params": {
+    "n": {
+      "type": "integer",
+      "default": 0
+    }
+  }
+}

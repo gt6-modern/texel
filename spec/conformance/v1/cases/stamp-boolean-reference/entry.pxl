@@ -1,0 +1,36 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "width": 1,
+  "height": 1,
+  "encoding": "char",
+  "palette": [
+    "FF0000FF"
+  ],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "stamp",
+          "sprite": "s",
+          "x": 0,
+          "y": 0,
+          "flipX": "$b"
+        }
+      ]
+    }
+  ],
+  "params": {
+    "b": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "sprites": {
+    "s": [
+      "0"
+    ]
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 16,
+  "height": 16,
+  "palette": [
+    "FF0000FF",
+    "00FF00FF"
+  ],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 0,
+          "w": 8,
+          "h": 4,
+          "slot": 1
+        },
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 1,
+          "w": 4,
+          "h": 1,
+          "slot": 2
+        },
+        {
+          "op": "mirror",
+          "from": {
+            "x": 0,
+            "y": 0,
+            "w": 8,
+            "h": 4
+          },
+          "to": {
+            "x": 2,
+            "y": 0
+          }
+        },
+        {
+          "op": "mirror",
+          "from": {
+            "x": 0,
+            "y": 0,
+            "w": 8,
+            "h": 4
+          },
+          "to": {
+            "x": 8,
+            "y": 0
+          },
+          "flipX": true
+        },
+        {
+          "op": "mirror",
+          "from": {
+            "x": 0,
+            "y": 0,
+            "w": 8,
+            "h": 4
+          },
+          "to": {
+            "x": 0,
+            "y": 4
+          },
+          "flipY": true
+        },
+        {
+          "op": "mirror",
+          "from": {
+            "x": 0,
+            "y": 0,
+            "w": 8,
+            "h": 4
+          },
+          "to": {
+            "x": 8,
+            "y": 4
+          },
+          "flipX": true,
+          "flipY": true
+        },
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 12,
+          "w": 4,
+          "h": 4,
+          "slot": 1
+        },
+        {
+          "op": "mirror",
+          "from": {
+            "x": -4,
+            "y": 12,
+            "w": 8,
+            "h": 4
+          },
+          "to": {
+            "x": 8,
+            "y": 12
+          }
+        }
+      ]
+    }
+  ]
+}
