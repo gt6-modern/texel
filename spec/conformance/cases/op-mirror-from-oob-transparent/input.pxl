@@ -1,0 +1,18 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 4,
+  "height": 2,
+  "palette": ["FF0000FF"],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        { "op": "fill", "slot": 1 },
+        { "op": "mirror", "from": { "x": 0, "y": -1, "w": 4, "h": 2 }, "to": { "x": 0, "y": 0 } }
+      ]
+    }
+  ]
+}

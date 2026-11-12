@@ -1,0 +1,10 @@
+{
+  "targets": [
+    {
+      "name": "main",
+      "bindings": {
+        "tint_slot": 5
+      }
+    }
+  ]
+}

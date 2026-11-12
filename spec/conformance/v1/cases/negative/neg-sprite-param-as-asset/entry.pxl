@@ -1,0 +1,1 @@
+{"format": "PXL", "version": 1, "encoding": "char", "width": 1, "height": 1, "palette": ["FFFFFFFF", "FF0000FF"], "sprites": {"s": ["1"]}, "assets": {"a": {"kind": "pxl", "path": "leaf.pxl"}, "s": {"kind": "pxl", "path": "leaf.pxl"}}, "params": {"p": {"type": "sprite"}}, "layers": [{"name": "b", "blend": "normal", "ops": [{"op": "stamp", "asset": "$p", "x": 0, "y": 0}]}]}

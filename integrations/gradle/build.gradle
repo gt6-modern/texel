@@ -1,0 +1,448 @@
+
+/*
+ * Texel Gradle 集成：单 target 编译 + 依赖清单驱动的增量构建。
+ *
+ * 三条门禁（PRD §20 阶段 5）：
+ *   1. 改任一**实际依赖** -> 对应 target 失效；
+ *   2. 改无关文件或未被选中的 asset -> 不失效；
+ *   3. 缓存开关 -> 输出与错误都不变（Gradle 的 --no-build-cache/--build-cache 两面都要一致）。
+ *
+ * 增量的做法：第一次运行时 compiler 用 --deps 写出**真实依赖清单**；之后把清单里列出的文件
+ * 当作本任务的 inputs。清单不存在时退化为"整个 asset root"，宁可多跑一次也不漏依赖。
+ */
+
+ext.repoRoot = file('../..').canonicalFile
+ext.compilerProject = new File(repoRoot, 'compiler/java')
+ext.work = layout.buildDirectory.get().asFile
+
+/*
+ * target 描述由调用方给：name<TAB>entry<TAB>out<TAB>bindings
+ * bindings 形如 "a=1,b=B87333FF"（为空则写 -）。PXL 文档自己不得指定输出路径（PRD §8.3）。
+ */
+ext.targets = []
+// 允许用 -PtxelTargets=... 指定另一份 target 描述：冲突检查需要在不改仓库文件的前提下
+// 造出「输出撞入口」「两个输出同路径」这些配置。
+ext.targetsFile = file(project.findProperty('txelTargets') ?: 'targets.tsv')
+if (targetsFile.exists()) {
+    targetsFile.eachLine { line ->
+        if (line.trim() && !line.startsWith('#')) {
+            def cells = line.split('\t', -1)
+            def binds = (cells.length > 3 && cells[3] != '-') ? cells[3] : ''
+            // N04（发布态复核 P2）：清单文件按 target **名**命名，重名会让两个 target 共用
+            // 同一份 .deps.tsv —— 增量判据只看后一个入口，前一个改了也不失效。
+            // 重名是调用方的配置错误，在配置期直接拒绝，不留"看起来成功"的余地。
+            if (targets.any { it.name == cells[0] }) {
+                throw new GradleException('target 名重复: ' + cells[0]
+                        + '（清单文件按名命名，重名会让增量判据互相覆盖）')
+            }
+            targets << [name: cells[0], entry: cells[1], out: cells[2], binds: binds]
+        }
+    }
+}
+
+ext.assetRoot = file('demo')
+ext.depsDir = new File(work, 'deps')
+ext.fingerprintFile = new File(work, 'compiler-fingerprint.txt')
+
+/** doFirst 收集到的源真实路径，供 doLast 使用（局部变量跨阶段不可见）。 */
+ext.sourcesSeen = []
+
+/** 原子写入：先写临时文件再 rename。目标即使是硬链接/符号链接，替换的也是目录项，
+ *  不会改写源文件的 inode（发布态复核 P1）。 */
+def writeAtomically = { File target, String text ->
+    def parent = target.parentFile
+    parent.mkdirs()
+    def temp = File.createTempFile('.texel-atomic-', '.tmp', parent)
+    try {
+        temp.setText(text, 'UTF-8')
+        java.nio.file.Files.move(temp.toPath(), target.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+    } catch (Exception failure) {
+        temp.delete()
+        throw failure
+    }
+}
+
+/** 上一次运行留下的清单里列出的文件；没有清单时退化为整个 asset root。 */
+def manifestInputs() {
+    def collected = files()
+    boolean any = false
+    targets.each { target ->
+        def manifest = new File(depsDir, target.name + '.deps.tsv')
+        if (manifest.exists()) {
+            any = true
+            collected += files(manifest)
+            manifest.eachLine { line ->
+                if (line.trim()) {
+                    def path = line.split('\t', -1)[2]
+                    collected += files(new File(assetRoot, path))
+                }
+            }
+        }
+    }
+    return any ? collected : files(assetRoot)
+}
+
+/** 当前 JVM 的 java 可执行文件：集成层不假设 PATH 里有 java（Gradle 自己也可能跑在别的 JDK 上）。 */
+def javaExecutable() {
+    return new File(System.getProperty('java.home'), 'bin/java').absolutePath
+}
+
+def compilerClasspath() {
+    // installDist 的目录名跟着 applicationName 走（现在是 texel-compiler），所以这里**不写死**，
+    // 而是找 cli/build/install/*/lib —— 换名字不会让集成层静默拿到空 classpath。
+    def installRoot = new File(compilerProject, 'cli/build/install')
+    def libs = []
+    installRoot.listFiles()?.each { directory ->
+        def lib = new File(directory, 'lib')
+        if (lib.isDirectory()) {
+            lib.listFiles()?.each { jar -> if (jar.name.endsWith('.jar')) libs << jar }
+        }
+    }
+    if (libs.isEmpty()) {
+        throw new GradleException('找不到 compiler 的 installDist 产物：先跑 '
+                + 'compiler/java/gradlew :cli:installDist')
+    }
+    return files(libs)
+}
+
+/**
+ * 增量判据由**依赖清单本身**给定：state = targets.tsv + compiler 指纹 + 每份清单的内容 +
+ * 清单里每个文件的**内容摘要**。相等即 up-to-date。
+ *
+ * 为什么不用 inputs.files(清单里列出的文件)：清单是上一次运行的**产物**，用产物去声明 inputs
+ * 会让"第一次运行"和"第二次运行"的输入集合不同（Gradle 因此永远认为不可信）。这里改为把
+ * 状态算成一份字符串，显式比较——判据与 PRD §20 阶段 5 的三条门禁一一对应，且可人工审阅。
+ */
+def stateFile = new File(work, 'texel-state.txt')
+
+/** 产物内容摘要：只判「文件在不在」抓不到「文件被截断/改坏」。 */
+def productDigests() {
+    def out = new StringBuilder()
+    targets.each { target ->
+        def product = file(target.out)
+        out.append('PRODUCT:').append(target.name).append('=')
+        if (product.isFile()) {
+            // 只写摘要：整份 hex 在大产物上会把 state 文件撑到几 MiB，而判据只需要"变了没有"。
+            def productDigest = java.security.MessageDigest.getInstance('SHA-256')
+            productDigest.update(product.bytes)
+            out.append(productDigest.digest().encodeHex().toString())
+        } else {
+            out.append('MISSING')
+        }
+        out.append('\n')
+    }
+    return out.toString()
+}
+
+def dependencyState() {
+    def out = new StringBuilder()
+    out.append(targetsFile.exists() ? targetsFile.getText('UTF-8') : 'NO-TARGETS')
+    out.append(fingerprintFile.exists() ? fingerprintFile.getText('UTF-8') : 'NO-FINGERPRINT')
+    targets.each { target ->
+        def manifest = new File(depsDir, target.name + '.deps.tsv')
+        if (!manifest.exists()) {
+            out.append('MISSING-MANIFEST:').append(target.name).append('\n')
+            return
+        }
+        out.append('MANIFEST:').append(manifest.getName()).append('\n')
+        manifest.eachLine { line ->
+            if (line.trim()) {
+                def cells = line.split('\t', -1)
+                out.append(cells[0]).append(' ').append(cells[1]).append(' ')
+                        .append(cells[2]).append(' ')
+                def source = new File(assetRoot, cells[2])
+                // 记录**磁盘上的真实拼写**（canonicalPath）：只改依赖文件名大小写时内容摘要不变，
+                // 但编译器会以 PXL008（拼写不符）拒绝，增量判据必须跟着失效
+                // （发布态复核：Windows 改大小写后 CLI 报 PXL008 而 Gradle 仍 UP-TO-DATE）。
+                out.append(source.exists() ? source.canonicalPath : 'GONE').append(' ')
+                if (source.isFile()) {
+                    out.append(source.bytes.encodeHex().toString())
+                } else {
+                    out.append('GONE')
+                }
+                out.append('\n')
+            }
+        }
+    }
+    return out.toString()
+}
+
+tasks.register('texelCompile') {
+    group = 'texel'
+    description = '把 targets.tsv 里的每个 target 编译成一个 PNG（单 target 调用，调用方循环）'
+
+    outputs.upToDateWhen {
+        // 判据 = 目标 + 编译器指纹 + 每个依赖的内容 + **每个产物的内容**。
+        // 只判产物「还在不在」时，被截断的 PNG 仍会 UP-TO-DATE —— 构建报绿而产物是坏的
+        // （发布态复核 F-R6-08）。
+        def expected = dependencyState() + productDigests()
+        return stateFile.exists() && stateFile.getText('UTF-8') == expected
+    }
+
+    doFirst {
+        // target 名决定清单路径：../../demo/parts/victim 这类名字会把预检清单写到源文件上
+        // （发布态复核 P1：Gradle 先把它改成 TSV，reader 随后 PXL001，源已损坏）。
+        targets.each { target ->
+            def name = String.valueOf(target.name)
+            if (name.contains('/') || name.contains('..') || name.trim().isEmpty()) {
+                throw new GradleException('target 名不合法: ' + name)
+            }
+        }
+        // 先对每个 target 跑 check --deps（**不写任何产物**）收集真实依赖，再判读写冲突。
+        // 只比入口是不够的：writer 的输出可能正好是 reader 的某个依赖，Gradle 会退出 1，
+        // 但那个依赖已经被写成 PNG 了（发布态复核 P1）。
+        def CP = [javaExecutable(), '-cp', compilerClasspath().asPath,
+                  'io.github.texel.cli.Main']
+        // 预检清单写到隔离目录，不占用正式 deps 位置
+        def preflightDir = new File(buildDir, 'tmp/texel-preflight')
+        preflightDir.mkdirs()
+        // 内部文件（预检清单 / 状态 / 指纹）必须**解析后**仍落在 build 目录内：
+        // 把 build/tmp/texel-preflight 或 build/texel-state.txt 做成指向依赖目录的符号链接时，
+        // 写入会顺着链接落到源文件上（发布态复核 P1）。canonicalFile 会解析链接。
+        // canonicalPath 在 Windows 上**不解析**符号链接（发布态复核 P1：两个原反例仍重现），
+        // 必须用 toRealPath；硬链接的路径仍在 build 内，所以还要按身份（isSameFile）再判一次。
+        def buildReal = buildDir.toPath().toRealPath()
+        def realOf = { File f ->
+            if (f.exists()) {
+                return f.toPath().toRealPath()
+            }
+            def parent = f.parentFile
+            while (parent != null && !parent.exists()) {
+                parent = parent.parentFile
+            }
+            if (parent == null) {
+                throw new GradleException('无法解析路径: ' + f)
+            }
+            return parent.toPath().toRealPath().resolve(f.name)
+        }
+        def requireInsideBuild = { File f, String what ->
+            def resolved = realOf(f)
+            if (!resolved.startsWith(buildReal)) {
+                throw new GradleException(what + ' 的实际落点不在 build 目录内: ' + f + ' -> ' + resolved)
+            }
+            resolved
+        }
+        requireInsideBuild(preflightDir, '预检清单目录')
+        requireInsideBuild(stateFile, '内部状态文件')
+        requireInsideBuild(fingerprintFile, '编译器指纹文件')
+        requireInsideBuild(depsDir, '依赖清单目录')
+        // 宿主大小写敏感性：Windows 上 Alpha/alpha 是**同一个文件**（发布态复核 P2-3）。
+        // 只比字符串名字会让两个 target 共用一份清单，增量判据互相覆盖。
+        boolean caseInsensitiveFs = providers.gradleProperty("txelCaseInsensitive").isPresent()
+                || System.getProperty("os.name").toLowerCase().contains("win")
+        def pathKey = { File f ->
+            // 键必须是**真实身份**：
+            // 1) 文件存在时用 toRealPath()——被读文件自身也可能是符号链接（发布态复核 P1）；
+            // 2) 不存在时先解析最近的已存在祖先，再把**剩下的整段相对路径**接回去——
+            //    只拼 basename 会把 build/one/out.png 与 build/two/out.png 压成同一个键（P2）。
+            def abs = f.absoluteFile
+            def cursor = abs
+            def tail = []
+            while (cursor != null && !cursor.exists()) {
+                tail.add(0, cursor.name)
+                cursor = cursor.parentFile
+            }
+            def resolved = (cursor == null) ? abs.toPath() : cursor.toPath().toRealPath()
+            tail.each { part -> resolved = resolved.resolve(part) }
+            def text = resolved.toString()
+            // 必须用 Locale.ROOT：默认 locale 下 tr_TR 会把 I 折成 ı，
+            // 让 FILE.png 与 file.png 得到不同的键（发布态复核 P2）。
+            return caseInsensitiveFs ? text.toLowerCase(java.util.Locale.ROOT) : text
+        }
+        // 内部保留路径：业务输出不得占用，否则先写 PNG 再用状态文本覆盖它。
+        def reserved = [:]
+        reserved[pathKey(stateFile)] = '内部状态文件 texel-state.txt'
+        reserved[pathKey(fingerprintFile)] = '编译器指纹文件'
+        def writeSet = [:]      // canonical File -> 谁在写
+        def readSet = [:]       // canonical File -> 逻辑路径
+        targets.each { target ->
+            def manifest = new File(preflightDir, target.name + '.deps.tsv')
+            def args = ['check', target.entry, '--asset-root', assetRoot.absolutePath,
+                        '--deps', manifest.absolutePath]
+            if (target.binds) {
+                target.binds.split(',').each { args += ['--bind', it] }
+            }
+            def proc = new ProcessBuilder(CP + args).redirectErrorStream(true).start()
+            def text = proc.inputStream.text
+            int code = proc.waitFor()
+            if (code != 0) {
+                throw new GradleException('target ' + target.name + ' 预检失败（退出码 '
+                        + code + '）: ' + text.trim())
+            }
+            readSet[pathKey(new File(assetRoot, target.entry))] = target.entry
+            manifest.eachLine { line ->
+                if (line.trim()) {
+                    def cells = line.split('\t', -1)
+                    if (cells.length >= 3) {
+                        readSet[pathKey(new File(assetRoot, cells[2]))] = cells[2]
+                    }
+                }
+            }
+            [file(target.out), new File(depsDir, target.name + '.deps.tsv')].each { written ->
+                def key = pathKey(written)
+                if (reserved.containsKey(key)) {
+                    throw new GradleException('target ' + target.name + ' 的输出 ' + written
+                            + ' 占用了内部文件 ' + reserved[key])
+                }
+                if (writeSet.containsKey(key)) {
+                    throw new GradleException('两个 target 写到同一文件: ' + written
+                            + '（' + writeSet[key] + ' 与 target ' + target.name + '）')
+                }
+                writeSet[key] = 'target ' + target.name
+            }
+        }
+        // 把本次编译读到的所有源的真实路径落盘：doLast / 指纹任务写入前按**身份**再判一次，
+        // 硬链接的路径仍落在 build 内，只有 isSameFile 才能识别（发布态复核 P1）。
+        def sourceList = new File(preflightDir, 'sources.txt')
+        def sourceText = new StringBuilder()
+        writeSet.keySet().each { }
+        readSet.each { key, logical ->
+            try {
+                sourceText.append(realOf(new File(key)).toString()).append('\n')
+            } catch (Exception ignored) {
+                // 解析不出来的路径交给后续步骤报错
+            }
+        }
+        // 这份清单本身也可能被做成指向源的链接（发布态复核 P1）：落点必须在 build 内，
+        // 且写入走原子写（rename 只替换目录项，不会改写源 inode）。
+        def realSourceList = realOf(sourceList)
+        if (!realSourceList.startsWith(buildReal)) {
+            throw new GradleException('预检源列表 的实际落点不在 build 目录内: ' + sourceList)
+        }
+        readSet.each { key, logical ->
+            try {
+                if (new File(key).toPath().toRealPath() == realSourceList) {
+                    throw new GradleException('预检源列表 与源文件是同一个文件: ' + sourceList)
+                }
+            } catch (java.io.IOException ignored) {
+                // 源不存在时 isSameFile 无意义；真实落点已在上面校验过。
+            }
+        }
+        writeAtomically(sourceList, sourceText.toString())
+        // 把本次读到的源真实路径放到 project.ext：doFirst 的局部变量在 doLast 里不可见。
+        project.ext.sourcesSeen = readSet.keySet().collect { key ->
+            try {
+                new File(key).toPath().toRealPath().toString()
+            } catch (Exception ignored) {
+                key
+            }
+        }
+
+        writeSet.each { written, who ->
+            if (readSet.containsKey(written)) {
+                throw new GradleException(who + ' 的输出 ' + written
+                        + ' 覆盖了依赖 ' + readSet[written] + '（任何写入之前中止）')
+            }
+        }
+    }
+
+    doLast {
+        depsDir.mkdirs()
+        // 内部写入前：实际落点必须在 build 内，且不得与本次读到的源是同一个文件。
+        // 路径检查挡不住硬链接，必须用 isSameFile（发布态复核 P1）。
+        def buildReal = buildDir.toPath().toRealPath()
+        def sourceReals = (project.ext.sourcesSeen ?: []).collect { java.nio.file.Paths.get(it) }
+        def requireNotSource = { File f, String what ->
+            def parent = f.parentFile
+            while (parent != null && !parent.exists()) {
+                parent = parent.parentFile
+            }
+            def real = f.exists() ? f.toPath().toRealPath() : parent.toPath().toRealPath().resolve(f.name)
+            if (!real.startsWith(buildReal)) {
+                throw new GradleException(what + ' 的实际落点不在 build 目录内: ' + f + ' -> ' + real)
+            }
+            sourceReals.each { s ->
+                if (s == real) {
+                    throw new GradleException(what + ' 与源文件是同一个文件: ' + f)
+                }
+                if (java.nio.file.Files.exists(s) && java.nio.file.Files.exists(real)
+                        && java.nio.file.Files.isSameFile(s, real)) {
+                    throw new GradleException(what + ' 与源文件是同一个文件（硬链接）: ' + f)
+                }
+            }
+        }
+        targets.each { target ->
+            def manifest = new File(depsDir, target.name + '.deps.tsv')
+            requireNotSource(manifest, '依赖清单')
+            def args = ['compile', target.entry, '--asset-root', assetRoot.absolutePath,
+                        '-o', file(target.out).absolutePath, '--deps', manifest.absolutePath]
+            if (target.binds) {
+                target.binds.split(',').each { args += ['--bind', it] }
+            }
+            def command = [javaExecutable(), '-cp', compilerClasspath().asPath,
+                           'io.github.texel.cli.Main'] + args
+            def process = new ProcessBuilder(command)
+                    .redirectErrorStream(true)
+                    .redirectOutput(ProcessBuilder.Redirect.INHERIT)
+                    .start()
+            int code = process.waitFor()
+            if (code != 0) {
+                throw new GradleException('target ' + target.name + ' 编译失败（退出码 ' + code + '）')
+            }
+        }
+        stateFile.parentFile.mkdirs()
+        // 写之前再解析一次：若此刻它指向 build 之外（例如被换成符号链接），直接失败而不是覆盖源。
+        requireNotSource(stateFile, '内部状态文件')
+        writeAtomically(stateFile, dependencyState() + productDigests())
+    }
+}
+
+/** 运行时指纹：compiler 自己的能力档案 + 宿主 JVM 版本，进缓存键（PRD §11.5）。 */
+tasks.register('compilerFingerprint') {
+    group = 'texel'
+    description = '记录 compiler 能力档案与 JVM 版本，作为增量判据的一部分'
+    def output = fingerprintFile
+    // 指纹本身也是"由编译器与运行时决定"的产物：不声明这两项，替换 compiler JAR 或换 JVM
+    // 之后任务仍会 UP-TO-DATE，指纹一直停在旧值——编译器升级就无法触发重编译。
+    inputs.files(compilerClasspath()).withPropertyName('compilerClasspath')
+    inputs.property('jvmVersion', System.getProperty('java.version'))
+    inputs.property('jvmVendor', System.getProperty('java.vendor'))
+    outputs.file(output)
+    doLast {
+        // 写之前先确认实际落点：指纹文件被做成指向源的链接时必须拒绝（发布态复核 P1）。
+        def buildRealFp = buildDir.toPath().toRealPath()
+        def realOut = output.exists() ? output.toPath().toRealPath()
+                : output.parentFile.toPath().toRealPath().resolve(output.name)
+        if (!realOut.startsWith(buildRealFp)) {
+            throw new GradleException('编译器指纹文件 的实际落点不在 build 目录内: '
+                    + output + ' -> ' + realOut)
+        }
+        output.parentFile.mkdirs()
+        def probe = new ByteArrayOutputStream()
+        def process = new ProcessBuilder([javaExecutable(), '-cp', compilerClasspath().asPath,
+                                          'io.github.texel.cli.Main', 'capabilities', '--json'])
+                .redirectErrorStream(true)
+                .start()
+        process.inputStream.transferTo(probe)
+        // 探测必须**成功**才能发布指纹：忽略退出值会把错误文本写进指纹，任务假绿
+        // （发布态复核 C1）。
+        int probeExit = process.waitFor()
+        String probeText = probe.toString('UTF-8')
+        if (probeExit != 0) {
+            throw new GradleException('编译器能力探测失败（exit ' + probeExit + '）: '
+                    + probeText.trim())
+        }
+        if (!probeText.trim().startsWith('{')) {
+            throw new GradleException('编译器能力探测没有返回 JSON: ' + probeText.trim())
+        }
+        // 只记 capabilities 与 JVM 版本还不够：同一个 compiler_version 下 JAR 内容变了（开发中
+        // 的常态），指纹文本不变 -> texelCompile 仍 UP-TO-DATE，产物停在旧构建上。
+        // 所以把 classpath 上每个 JAR 的内容摘要也算进指纹。
+        def digest = java.security.MessageDigest.getInstance('SHA-256')
+        compilerClasspath().files.sort { it.name }.each { jar ->
+            digest.update(jar.name.getBytes('UTF-8'))
+            digest.update(jar.bytes)
+        }
+        def compilerDigest = digest.digest().encodeHex().toString()
+        // Groovy 的续行靠**行尾**的运算符：行首的 + 是一元加号，会变成 String.positive()。
+        def fingerprintText = probeText +
+                'jvm=' + System.getProperty('java.version') + '\n' +
+                'compiler_sha256=' + compilerDigest + '\n'
+        writeAtomically(output, fingerprintText)
+    }
+}
+
+tasks.named('texelCompile') {
+    dependsOn 'compilerFingerprint'
+}

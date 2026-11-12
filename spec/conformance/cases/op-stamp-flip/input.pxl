@@ -1,0 +1,71 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 16,
+  "height": 16,
+  "palette": [
+    "FF0000FF",
+    "00FF00FF",
+    "0000FFFF"
+  ],
+  "sprites": {
+    "lshape": [
+      "0..",
+      "0..",
+      "011"
+    ],
+    "unused": [
+      "222",
+      "222"
+    ]
+  },
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "stamp",
+          "sprite": "lshape",
+          "x": 0,
+          "y": 0
+        },
+        {
+          "op": "stamp",
+          "sprite": "lshape",
+          "x": 4,
+          "y": 0,
+          "flipX": true
+        },
+        {
+          "op": "stamp",
+          "sprite": "lshape",
+          "x": 8,
+          "y": 0,
+          "flipY": true
+        },
+        {
+          "op": "stamp",
+          "sprite": "lshape",
+          "x": 12,
+          "y": 0,
+          "flipX": true,
+          "flipY": true
+        },
+        {
+          "op": "stamp",
+          "sprite": "lshape",
+          "x": -1,
+          "y": 6
+        },
+        {
+          "op": "stamp",
+          "sprite": "lshape",
+          "x": 14,
+          "y": 6
+        }
+      ]
+    }
+  ]
+}

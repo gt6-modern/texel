@@ -1,0 +1,35 @@
+﻿{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 2,
+  "height": 2,
+  "palette": [
+    "FF0000FF",
+    "00FF00FF"
+  ],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 0,
+          "w": 2,
+          "h": 1,
+          "slot": 1
+        },
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 1,
+          "w": 2,
+          "h": 1,
+          "slot": 2
+        }
+      ]
+    }
+  ]
+}

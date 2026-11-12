@@ -1,0 +1,29 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 4,
+  "height": 4,
+  "params": {
+    "tint_slot": {
+      "type": "integer",
+      "default": 1
+    }
+  },
+  "palette": [
+    "FF0000FF",
+    "00FF00FF"
+  ],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "fill",
+          "slot": "$tint_slot"
+        }
+      ]
+    }
+  ]
+}

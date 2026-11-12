@@ -1,0 +1,38 @@
+/*
+ * 构建纪律：class major == 52、只用 java.base、无 Java 9+ 特性。
+ *
+ * 单独一个任务，因为它检查的是**产物**（build/classes、jar），必须在编译之后跑，
+ * 而且要被 `check` 依赖——放在 core 或 cli 的 test 里都会因为"另一个模块还没编译"
+ * 而漏掉一半。
+ */
+
+tasks.register('disciplineCheck', JavaExec) {
+    group = 'verification'
+    description = '断言 class major == 52、生产 JAR 只依赖 java.base、源码无 Java 9+ 特性'
+    dependsOn ':core:testClasses', ':cli:testClasses', ':core:jar', ':cli:jar'
+    classpath = project(':core').sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.texel.core.BuildDisciplineMain'
+    systemProperty 'txel.classdirs', [
+        project(':core').layout.buildDirectory.dir('classes/java/main').get().asFile,
+        project(':core').layout.buildDirectory.dir('classes/java/test').get().asFile,
+        project(':cli').layout.buildDirectory.dir('classes/java/main').get().asFile,
+        project(':cli').layout.buildDirectory.dir('classes/java/test').get().asFile,
+    ].join(',')
+    systemProperty 'txel.sourcedirs', [
+        project(':core').file('src/main/java'),
+        project(':core').file('src/test/java'),
+        project(':cli').file('src/main/java'),
+        project(':cli').file('src/test/java'),
+    ].join(',')
+    systemProperty 'txel.jars', [
+        project(':core').tasks.named('jar').get().archiveFile.get().asFile,
+        project(':cli').tasks.named('jar').get().archiveFile.get().asFile,
+    ].join(',')
+}
+
+// 根项目没有 java 插件，所以没有自己的 `check`；把它挂到两个模块的 `check` 上。
+gradle.projectsEvaluated {
+    subprojects { sub ->
+        sub.tasks.named('check') { dependsOn rootProject.tasks.named('disciplineCheck') }
+    }
+}

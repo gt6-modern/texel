@@ -1,0 +1,20 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 1,
+  "height": 1,
+  "palette": [
+    "FF0000FF"
+  ],
+  "sprites": {
+    "s": []
+  },
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": []
+    }
+  ]
+}

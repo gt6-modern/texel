@@ -1,0 +1,33 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 1,
+  "height": 1,
+  "palette": [
+    "FF0000FF",
+    "000000FF"
+  ],
+  "layers": [
+    {
+      "name": "multiply-base",
+      "blend": "multiply",
+      "ops": [
+        {
+          "op": "fill",
+          "slot": 1
+        }
+      ]
+    },
+    {
+      "name": "alpha-veil",
+      "blend": "mask",
+      "ops": [
+        {
+          "op": "fill",
+          "slot": 2
+        }
+      ]
+    }
+  ]
+}

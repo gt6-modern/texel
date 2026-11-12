@@ -1,0 +1,13 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 1,
+  "height": 1,
+  "params": { "tgt": { "type": "asset" } },
+  "palette": ["FFFFFFFF"],
+  "assets": { "true": { "kind": "pxl", "path": "parts/leaf.pxl" } },
+  "layers": [
+    { "name": "b", "blend": "normal", "ops": [ { "op": "stamp", "asset": "$tgt", "x": 0, "y": 0 } ] }
+  ]
+}

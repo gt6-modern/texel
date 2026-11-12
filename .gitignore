@@ -1,0 +1,91 @@
+# OS / 编辑器
+Thumbs.db
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# 实现与测试的产物
+__pycache__/
+*.pyc
+
+# CLI 测试与一次性探针脚本的临时工作区(见 tests/test_cli.py)。
+# 系统 temp 在本机沙箱下删不掉,所以临时文件放在仓库内。
+tests/_sandbox/
+
+# 仓库内的临时导出树(审查者用 `git archive` 导出到仓库内做干净检出验证时会用到)。
+# 不加这条,一次 `git add -A` 就会把整份仓库副本扫进提交——本项目真发生过一次。
+*_export_tmp/
+export_tmp/
+
+# 注意:不要在这里忽略 spec/conformance/cases/**/input.pxl。
+# op- / blend- 形态的 input.pxl 必须入库(§13.1);只有 §13.6 的"生成型"
+# 用例输入不入库,而那是由 notes.md 里的 ## recipe 判定的,不是按文件名。
+# 按文件名一刀切会把合法的仅渲染正例也挡在仓库外。
+#
+# 目前只有一条生成型输入要忽略:neg-doc-too-large 的 input.pxl(64.02 MiB)。
+# 逐路径忽略,不用通配——通配会把上面说的合法 input.pxl 一起挡掉。
+spec/conformance/cases/negative/neg-doc-too-large/input.pxl
+
+# 构建产物。只锚定两个真实位置,不写成裸 `build/`:
+# 裸 `build/` 会按名字吞掉任意层级同名目录(包括 `spec/conformance/cases/` 下未来可能出现的
+# `build/`)——那正是本文件 :21-24 警告过的"按文件名一刀切"。
+#   /build/
+compiler/python/build/                    pip install . 与 python -m build 的仓库根产物
+#   compiler/java/**/build/
+compiler/python/build/    Gradle 任意模块深度
+/build/
+compiler/python/build/
+compiler/java/**/build/
+compiler/python/build/
+.gradle-home/
+compiler/java/.gradle/
+
+# 日志(也挡住 JVM 崩溃时的 hs_err_pid*.log)
+*.log
+
+# 审查者/脚本留下的整仓副本(第九轮出过一次 git add -A 事故,这类目录必须显式挡住)
+.review-*/
+
+# Python 打包产物
+*.egg-info/
+dist/
+.pytest_cache/
+
+# 原子写入用的临时文件:两个实现都建在**目标同目录**(importer 的 <name>.<pid>.<n>.tmp、
+# Java 的 .texel-compiler-*.tmp),gen_cases 的 input.pxl.tmp 也在用例目录里。
+# 一条 `*.tmp` 同时覆盖这三种;不再单独写各实现的前缀(写了两份就有一份会先腐坏)。
+*.tmp
+
+# 通用产物空档:目前没有生产者,但同类事故一旦发生就是整仓污染。
+# 每条都核查过:仓库里没有任何 tracked 文件命中它们。
+# 这几条按名字生效、比语料路径更宽,兜底由 tests/test_packaging.py 的 IgnoreHygieneTest 承担
+# （断言 git ls-files -i -c --exclude-standard 为空:任何 tracked 文件被吞掉都会让门禁变红）。
+*.tar
+*.tar.gz
+*.hprof
+*.jfr
+*.bak
+/out/
+/bin/
+*.orig
+*.rej
+junit.xml
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# 构建集成（integrations/gradle）的产物与增量状态
+integrations/gradle/build/
+compiler/python/build/
+
+# Gradle 的本地缓存状态（任意模块、任意深度）。仓库里只应出现源码。
+.gradle/
+
+# 发布态审查留下的探针目录（不得入库）
+.java-review-probe-*/
+**/*.class
+
+# 测试用的仓库内临时目录（宿主 TEMP 在沙箱下不可写，测试改用它）
+tests/_tmp/

@@ -1,0 +1,24 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 1,
+  "height": 1,
+  "palette": [
+    "FF0000FF"
+  ],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "stamp",
+          "sprite": "missing",
+          "x": 0,
+          "y": 0
+        }
+      ]
+    }
+  ]
+}

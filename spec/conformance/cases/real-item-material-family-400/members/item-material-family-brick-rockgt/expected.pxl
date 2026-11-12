@@ -1,0 +1,88 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 16,
+  "height": 16,
+  "palette": [
+    "C5C5C5FF",
+    "CDCDCDFF",
+    "AFAFAFFF",
+    "9E9E9EFF",
+    "D3D3D3FF",
+    "EEEFEFFF",
+    "E8E8E8FF",
+    "E1E1E1FF",
+    "CFCFCFFF",
+    "D6D7D7FF",
+    "D0CFD0FF",
+    "CCCCCDFF",
+    "EBEAEAFF",
+    "E4E4E4FF",
+    "DDDDDDFF",
+    "BABABAFF",
+    "D8D8D8FF",
+    "D9D9D9FF",
+    "D3D2D3FF",
+    "CCCCCBFF",
+    "B4B4B4FF",
+    "989898FF",
+    "C8C8C8FF",
+    "C1C1C1FF",
+    "9C9C9CFF",
+    "929292FF",
+    "CBCBCBFF",
+    "B6B6B6FF",
+    "B0B0B0FF",
+    "A9A9A9FF",
+    "D0D0D0FF",
+    "E6E6E6FF",
+    "D5D5D6FF",
+    "ACACACFF",
+    "D6D6D6FF",
+    "DCDCDCFF",
+    "BFBFC0FF",
+    "949494FF"
+  ],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 0,
+          "w": 16,
+          "h": 3,
+          "slot": 0
+        },
+        {
+          "op": "grid",
+          "x": 0,
+          "y": 3,
+          "grid": [
+            ".......0123.....",
+            "......456723....",
+            ".....85679A23...",
+            "....BCDE9A0F3...",
+            "...0GDHIJ0FKL...",
+            "...0DHIMNFKOP...",
+            "...QD8MNRSTP....",
+            "...UVW0RXLP.....",
+            "....YZQX3P......",
+            ".....a3bP......."
+          ]
+        },
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 13,
+          "w": 16,
+          "h": 3,
+          "slot": 0
+        }
+      ]
+    }
+  ]
+}

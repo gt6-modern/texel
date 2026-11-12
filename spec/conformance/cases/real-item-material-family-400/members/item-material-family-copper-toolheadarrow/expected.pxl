@@ -1,0 +1,94 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 16,
+  "height": 16,
+  "palette": [
+    "FFFFFF00",
+    "96969600",
+    "44444400",
+    "D8D8D800",
+    "C8C8C8FF",
+    "BBBBBBFF",
+    "CACACAFF",
+    "BEBDBDFF",
+    "F4F4F4FF",
+    "8E8E8EFF",
+    "C0C0C0FF",
+    "F8F9F9FF",
+    "E6E5E6FF",
+    "868585FF",
+    "C3C3C3FF",
+    "FCFCFCFF",
+    "EAEAEAFF",
+    "B7B7B7FF",
+    "A7A7A7FF",
+    "717171FF",
+    "B8B8B9FF",
+    "EDEDEDFF",
+    "BABBBBFF",
+    "ABABA9FF",
+    "999A9AFF",
+    "686868FF",
+    "AEAEAEFF",
+    "ADADAD00",
+    "8C8C8CFF",
+    "7C7C7CFF",
+    "545454FF",
+    "89672700",
+    "7F7F7FFF",
+    "6F6F6FFF",
+    "4A4B4AFF",
+    "E0E0E000",
+    "C6C6C600",
+    "281E0B00",
+    "424242FF",
+    "373737FF",
+    "3F3F3F00"
+  ],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 0,
+          "w": 16,
+          "h": 2,
+          "slot": 1
+        },
+        {
+          "op": "grid",
+          "x": 0,
+          "y": 2,
+          "grid": [
+            "0000000000001020",
+            "0000000000133120",
+            "0000000000453200",
+            "0000000067891200",
+            "0000006ABCD02000",
+            "00006EFGHIJ00000",
+            "0000KLMNOP000000",
+            "00000QRSTU000000",
+            "00000VWXY0000000",
+            "000Zab0cd0000000",
+            "00ZaZe0000000000",
+            "00eZe00000000000",
+            "000e000000000000"
+          ]
+        },
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 15,
+          "w": 16,
+          "h": 1,
+          "slot": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 2049,
+  "height": 2048,
+  "palette": [
+    "FF0000FF"
+  ],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": []
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 2,
+  "height": 2,
+  "palette": ["B87333FF", "E0A060FF"],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        { "op": "grid", "x": 0, "y": 0, "grid": ["01", "10"] }
+      ]
+    }
+  ]
+}

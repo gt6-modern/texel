@@ -1,0 +1,158 @@
+name: ci
+
+# 两道门禁互不依赖。注意这里**不挂任何外部项目的 check**——本仓库不产出进入别人
+# 资源包的文件(AGENTS.md §4.3)。
+#
+# 覆盖率分工(审查把它列为 P1 的"同一份语料跑五遍"):
+#   * JDK 21 那一个 job 跑**全量** 809 项 conformance + 37 组单测 + 19 组 CLI。
+#   * JDK 8/11/17 只跑**代表性 smoke**:三档编码、三种 blend、几条 op、一个批量套件、
+#     一个抽取负例、一个渲染负例。它们要证的是"同一份 class major 52 在这些运行时上
+#     行为一致",不是把那 809 项再判四遍。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    name: Python ${{ matrix.python }} 抽取器 + 语料体检
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # AGENTS.md §4.2 要求"CI 跑一次 3.8 解释器":3.8 是下限,3.12 跟当前版本。
+        python: ["3.8", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: 生成型用例的输入必须先按配方生成(否则体检会因缺文件失败)
+        run: python spec/conformance/tools/gen_cases.py --all
+      - name: 生成器幂等性
+        run: |
+          python spec/conformance/tools/gen_cases.py --check
+          python spec/conformance/tools/gen_conformance_cases.py --check
+      - name: 单元测试(仅标准库,零第三方依赖)
+        run: python -m unittest discover -s tests
+      - name: 语料体检(独立渲染 oracle + 索引语义)
+        run: python spec/conformance/tools/python_ref_verify.py
+      # 第二个 compiler（Python 独立实现）的语料门禁：按 pxl-v1 能力档案跑 base + components。
+      - name: 第二个 compiler 的语料门禁
+        run: python compiler/python/tools/conformance.py
+      # 真实素材的上游复现**不在这里**:素材源是本机的只读目录,不在任何公开远端上,
+      # CI 无法 checkout。已提交的 samples/ 与 real-* 用例由上面的体检逐成员核对
+      # (存在性、PROVENANCE 登记、expected.pxl 往返)。需要复现上游时在维护者机器上:
+      #   PXL_TEXTURE_ROOT=<素材源根> python spec/conformance/tools/gen_real_cases.py --check
+
+  build:
+    name: 构建 + 全量 check(JDK 21)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: liberica
+          java-version: "21"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 生成型用例的输入
+        run: python spec/conformance/tools/gen_cases.py --all
+      - name: gradlew check(全量 809 项 + discipline)
+        working-directory: compiler/java
+        run: ./gradlew --no-daemon check -Ppython=python
+      # 构建集成的增量门禁（改依赖失效 / 改无关文件不失效 / 缓存开关不改字节）。
+      # 需要 compiler 的 installDist 产物，所以放在 check 之后。
+      - name: 构建集成的增量门禁
+        run: |
+          ./gradlew --no-daemon :cli:installDist
+          cd ../.. && bash integrations/gradle/verify-incremental.sh
+          bash integrations/gradle/verify-conflicts.sh
+        working-directory: compiler/java
+      - uses: actions/upload-artifact@v4
+        with:
+          name: classes
+          path: |
+            compiler/java/core/build/classes/java/main
+            compiler/java/core/build/classes/java/test
+            compiler/java/cli/build/classes/java/main
+            compiler/java/cli/build/classes/java/test
+
+  runtime:
+    name: Java 8 字节码跑在 JDK ${{ matrix.java }}(代表性 smoke)
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 产物是 class major 52,8/11/17/21 都能直接跑(AGENTS.md §4.1 的目的)。
+        java: ["8", "11", "17", "21"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: liberica
+          java-version: ${{ matrix.java }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: classes
+          path: compiler/java
+      - name: 生成型用例的输入
+        run: python spec/conformance/tools/gen_cases.py --all
+      - name: 单测 + CLI
+        run: |
+          set -euo pipefail
+          # JDK 9+ 才有 --limit-modules;JDK 8 没这个选项。
+          if [ "${{ matrix.java }}" = "8" ]; then limit=""; else limit="--limit-modules java.base"; fi
+          core="compiler/java/core/build/classes/java/main:compiler/java/core/build/classes/java/test"
+          cli="compiler/java/cli/build/classes/java/test:compiler/java/cli/build/classes/java/main:compiler/java/core/build/classes/java/main"
+          java $limit -Dfile.encoding=UTF-8 -cp "$core" io.github.texel.core.UnitTestMain
+          java $limit -Dfile.encoding=UTF-8 -Dtxel.repo="$PWD" -cp "$cli" io.github.texel.cli.CliTestMain
+      - name: conformance smoke(三档编码 + 三种 blend + 图元 + 批量 + 两类负例)
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.java }}" = "8" ]; then limit=""; else limit="--limit-modules java.base"; fi
+          core="compiler/java/core/build/classes/java/main:compiler/java/core/build/classes/java/test"
+          java $limit -Dfile.encoding=UTF-8 -Dtxel.repo="$PWD" -Dtxel.python=python -cp "$core" \
+            io.github.texel.core.ConformanceMain \
+            syn-16x16-mono syn-16x16-tricolor syn-tier-62 real-autoclave-front \
+            syn-ops-fallback syn-grid-large-index4 blend-normal-a128 blend-multiply-a128 blend-mask-a128 \
+            op-line-bresenham op-mirror-overlap op-stamp-flip \
+            real-chain-overlay-dedupe \
+            negative/neg-png-crc negative/neg-resource-raster-budget
+
+  windows:
+    name: Windows 全量（大小写与 junction 相关门禁只在这里有意义）
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: liberica
+          java-version: "21"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 生成型用例的输入
+        run: python spec/conformance/tools/gen_cases.py --all
+      - name: 单元测试
+        run: python -m unittest discover -s tests
+      - name: 第二个 compiler 的语料门禁
+        run: python compiler/python/tools/conformance.py
+      - name: gradlew check
+        working-directory: compiler/java
+        run: ./gradlew.bat --no-daemon check -Ppython=python
+      # 冲突门禁在 Windows 上跑：大小写身份（G）与 NTFS 硬链接（J/K）只有这里有意义；
+      # 符号链接相关的 H/I/M 在没有特权的 runner 上会显式 SKIP。
+      - name: 构建集成的冲突门禁
+        shell: bash
+        run: |
+          cd compiler/java
+          ./gradlew.bat --no-daemon :cli:installDist
+          cd ../..
+          bash integrations/gradle/verify-conflicts.sh

@@ -1,0 +1,150 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 16,
+  "height": 16,
+  "palette": [
+    "FFFFFF00",
+    "46464600",
+    "DDDDDD00",
+    "D7D7D700",
+    "D8D8D800",
+    "89898900",
+    "E3E3E300",
+    "C8C8C800",
+    "D2D2D2FF",
+    "E1E1E1FF",
+    "D5D5D5FF",
+    "FFFFFFFF",
+    "F5F5F5FF",
+    "F2F2F2FF",
+    "CECECE00",
+    "D9D9D9FF",
+    "FDFDFDFF",
+    "F8F8F8FF",
+    "C4C4C4FF",
+    "B8B8B800",
+    "C2C2C200",
+    "EAEAEAFF",
+    "E0E0E0FF",
+    "E9E9E9FF",
+    "B7B7B7FF",
+    "868686FF",
+    "A8A8A800",
+    "ABABABFF",
+    "DADADAFF",
+    "FCFCFCFF",
+    "DDDDDDFF",
+    "BEBEBEFF",
+    "DCDCDCFF",
+    "D6D6D6FF",
+    "E5E5E5FF",
+    "EEEEEEFF",
+    "E4E4E4FF",
+    "C5C5C5FF",
+    "B4B4B4FF",
+    "BBBBBBFF",
+    "ADADADFF",
+    "B6B6B600"
+  ],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 0,
+          "w": 16,
+          "h": 1,
+          "slot": 1
+        },
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 1,
+          "w": 4,
+          "h": 1,
+          "slot": 1
+        },
+        {
+          "op": "rect",
+          "x": 4,
+          "y": 1,
+          "w": 5,
+          "h": 1,
+          "slot": 2
+        },
+        {
+          "op": "rect",
+          "x": 9,
+          "y": 1,
+          "w": 7,
+          "h": 1,
+          "slot": 1
+        },
+        {
+          "op": "grid",
+          "x": 0,
+          "y": 2,
+          "grid": [
+            "0001234351000000",
+            "0012667895100000",
+            "0012470AB9590000",
+            "0012667ABCD89800",
+            "001266EFGH88BI00",
+            "00126JK9LM8BNOP0",
+            "00999QDB99LHARP0",
+            "09HBH8SHTL9UVRP0",
+            "009LBB8WCX8HVRP0",
+            "00P9YZabVLHDRP10",
+            "000P89SVcdRRP510",
+            "0000PceRRRPPf100"
+          ]
+        },
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 14,
+          "w": 5,
+          "h": 1,
+          "slot": 1
+        },
+        {
+          "op": "rect",
+          "x": 5,
+          "y": 14,
+          "w": 5,
+          "h": 1,
+          "slot": 26
+        },
+        {
+          "op": "rect",
+          "x": 10,
+          "y": 14,
+          "w": 3,
+          "h": 1,
+          "slot": 2
+        },
+        {
+          "op": "rect",
+          "x": 13,
+          "y": 14,
+          "w": 3,
+          "h": 1,
+          "slot": 1
+        },
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 15,
+          "w": 16,
+          "h": 1,
+          "slot": 1
+        }
+      ]
+    }
+  ]
+}

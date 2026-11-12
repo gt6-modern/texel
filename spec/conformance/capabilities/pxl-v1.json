@@ -1,0 +1,16 @@
+{
+  "capabilities_version": 1,
+  "compiler_id": "io.github.texel.compiler",
+  "compiler_version": "0.1.0",
+  "conformance_profile": "pxl-v1",
+  "language_versions": [
+    1
+  ],
+  "error_code_ranges": {
+    "1": {
+      "min": "PXL001",
+      "max": "PXL012"
+    }
+  },
+  "png_input_profile": "pxl-png"
+}

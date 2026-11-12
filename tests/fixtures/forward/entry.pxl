@@ -1,0 +1,21 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 2,
+  "height": 2,
+  "params": { "c": { "type": "color", "default": "B87333FF" } },
+  "palette": ["FFFFFFFF"],
+  "assets": {
+    "blade": { "kind": "pxl", "path": "parts/blade.pxl", "params": { "tint": "$c" } }
+  },
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        { "op": "stamp", "asset": "blade", "x": 0, "y": 0 }
+      ]
+    }
+  ]
+}

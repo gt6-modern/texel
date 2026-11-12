@@ -1,0 +1,11 @@
+/*
+ * texel-compiler —— PXL 渲染器（core + cli）。
+ *
+ * 两个模块都编译到 Java 8 字节码（class major 52）：`options.release = 8`。
+ * 生产代码只允许 `java.base`，不引入任何第三方依赖。
+ */
+
+rootProject.name = 'texel-compiler-java'
+
+include 'core'
+include 'cli'

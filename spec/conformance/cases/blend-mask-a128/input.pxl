@@ -1,0 +1,52 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 2,
+  "height": 2,
+  "palette": [
+    "112233FF",
+    "00FF0080",
+    "00FF0000"
+  ],
+  "layers": [
+    {
+      "name": "bottom",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "fill",
+          "slot": 1
+        }
+      ]
+    },
+    {
+      "name": "mask128",
+      "blend": "mask",
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 0,
+          "w": 2,
+          "h": 1,
+          "slot": 2
+        }
+      ]
+    },
+    {
+      "name": "mask0",
+      "blend": "mask",
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 1,
+          "w": 2,
+          "h": 1,
+          "slot": 3
+        }
+      ]
+    }
+  ]
+}

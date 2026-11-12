@@ -1,0 +1,13 @@
+# 规范 §3.1 要求 PXL 文件为 LF。本仓库在 Windows 上开发,
+# 不钉死行尾就会检出半 CRLF 的文件,而那是规范明确禁止的。
+* text=auto eol=lf
+
+# 二进制:不做行尾转换、不做文本 diff
+*.png binary
+*.jar binary
+
+# 例外:§3.8 的接受集用例必须**故意**保留非规范形态,否则用例失去覆盖。
+# 上面的 eol=lf 会把 op-lenient-bom-crlf 的 CRLF 换行翻成 LF,正好抹掉它要测的东西。
+# `-text` 关闭该路径的全部文本转换(含行尾归一化与 BOM 剥离);`-eol` 把
+# 全局 `eol=lf` 一并按掉,免得 check-attr 里还挂着一个会误导人的 eol。
+spec/conformance/cases/op-lenient-bom-crlf/input.pxl -text -eol

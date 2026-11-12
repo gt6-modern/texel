@@ -1,0 +1,3 @@
+# profile	suite	action	case
+pxl-v1	base	include_all	-
+pxl-v1	components	include_all	-

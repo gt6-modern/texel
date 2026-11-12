@@ -1,0 +1,27 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 4,
+  "height": 4,
+  "params": {
+    "base_color": {
+      "type": "color"
+    }
+  },
+  "palette": [
+    "$base_color"
+  ],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "fill",
+          "slot": 1
+        }
+      ]
+    }
+  ]
+}

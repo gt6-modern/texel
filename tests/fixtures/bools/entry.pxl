@@ -1,0 +1,18 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 2,
+  "height": 1,
+  "params": {
+    "flag": { "type": "boolean", "default": true },
+    "c": { "type": "color", "default": "B87333FF" }
+  },
+  "palette": ["$c"],
+  "assets": { "tile": { "kind": "pxl", "path": "parts/tile.pxl" } },
+  "layers": [
+    { "name": "b", "blend": "normal", "ops": [
+      { "op": "stamp", "asset": "tile", "x": 0, "y": 0, "flipX": "$flag" }
+    ] }
+  ]
+}

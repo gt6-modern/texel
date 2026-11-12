@@ -1,0 +1,10 @@
+{
+  "targets": [
+    {
+      "name": "s1",
+      "bindings": {
+        "p": "s"
+      }
+    }
+  ]
+}

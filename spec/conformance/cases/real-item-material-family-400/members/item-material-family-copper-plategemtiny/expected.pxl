@@ -1,0 +1,125 @@
+{
+  "format": "PXL",
+  "version": 1,
+  "encoding": "char",
+  "width": 16,
+  "height": 16,
+  "palette": [
+    "FFFFFF00",
+    "D7D7D700",
+    "F6F6F600",
+    "B6B6B600",
+    "DFDFDFFF",
+    "E2E2E2FF",
+    "D2D2D2FE",
+    "D2D2D2FD",
+    "D1D1D100",
+    "F5F5F5FF",
+    "FBFBFBFF",
+    "FAFAFAFF",
+    "EEEEEEFF",
+    "E0E0E0FF",
+    "B1B1B1FF",
+    "F6F6F6FF",
+    "D5D5D5FF",
+    "B1B1B1FD",
+    "F3F3F3FF",
+    "C4C4C4FF",
+    "F0F0F0FF",
+    "EDEDEDFF",
+    "BEBEBEFF",
+    "E4E4E400",
+    "BDBDBDFF",
+    "CDCDCDFF"
+  ],
+  "layers": [
+    {
+      "name": "base",
+      "blend": "normal",
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 0,
+          "w": 16,
+          "h": 2,
+          "slot": 1
+        },
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 2,
+          "w": 4,
+          "h": 1,
+          "slot": 1
+        },
+        {
+          "op": "rect",
+          "x": 4,
+          "y": 2,
+          "w": 3,
+          "h": 1,
+          "slot": 2
+        },
+        {
+          "op": "rect",
+          "x": 7,
+          "y": 2,
+          "w": 9,
+          "h": 1,
+          "slot": 1
+        },
+        {
+          "op": "grid",
+          "x": 0,
+          "y": 3,
+          "grid": [
+            "0000100111100000",
+            "0000100002211130",
+            "0001004567222130",
+            "0001089ABCDE2130",
+            "000126BFFFGH1300",
+            "000124FF9IJ21300",
+            "00122DKLCDMN1300",
+            "00122EOJP4EN1300",
+            "001112NNHEN13000",
+            "0033311111N13000",
+            "0000033331113000"
+          ]
+        },
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 14,
+          "w": 9,
+          "h": 1,
+          "slot": 1
+        },
+        {
+          "op": "rect",
+          "x": 9,
+          "y": 14,
+          "w": 3,
+          "h": 1,
+          "slot": 4
+        },
+        {
+          "op": "rect",
+          "x": 12,
+          "y": 14,
+          "w": 4,
+          "h": 1,
+          "slot": 1
+        },
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 15,
+          "w": 16,
+          "h": 1,
+          "slot": 1
+        }
+      ]
+    }
+  ]
+}
