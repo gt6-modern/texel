@@ -923,7 +923,7 @@ final class Validator {
             RawLayer raw = doc.layers.get(index);
             Doc.Op[] ops = new Doc.Op[raw.ops.size()];
             for (int opIndex = 0; opIndex < ops.length; opIndex++) {
-                ops[opIndex] = raw.ops.get(opIndex).toOp();
+                ops[opIndex] = raw.ops.get(opIndex);
             }
             layers[index] = new Doc.Layer(raw.blend, ops);
         }
@@ -1142,56 +1142,22 @@ final class Validator {
         }
     }
 
-    private static final class RawOp {
-        final String kind;
+    /**
+     * 校验期的 op：直接在 {@link Doc.Op} 上加"原始 JSON"。
+     *
+     * <p>上一版这里把 {@code Doc.Op} 的 15 个字段又抄了一遍，再用 {@code toOp()} 逐字段
+     * 复抄回去：给 op 加一个字段就要改三处，漏一处就是渲染期读到默认值（2026-11-14 审查 P2）。
+     * 现在继承父类字段，只多一个 {@code value}，校验结束后直接就是渲染期要的 {@link Doc.Op}。
+     *
+     * <p>没有 {@code slot} 成员的 op（{@code erase} / {@code grid}）用父类的默认值 0——
+     * 那正是渲染期的语义，不再需要 {@code -1} 哨兵 + 一次归一。
+     */
+    private static final class RawOp extends Doc.Op {
         final Json.Value value;
-        String[] rows;
-        /** asset stamp 的 asset 名（与 sprite 恰好一个非 null）。 */
-        String asset;
-        // slot < 0 表示"该 op 没有数值 slot"（erase / grid）。
-        int slot = -1;
-        int x;
-        int y;
-        int x0;
-        int y0;
-        int x1;
-        int y1;
-        int w;
-        int h;
-        int fromX;
-        int fromY;
-        int fromW;
-        int fromH;
-        boolean flipX;
-        boolean flipY;
-        String sprite;
 
         RawOp(String kind, Json.Value value) {
-            this.kind = kind;
+            super(kind);
             this.value = value;
-        }
-
-        Doc.Op toOp() {
-            Doc.Op op = new Doc.Op(kind);
-            op.x = x;
-            op.y = y;
-            op.x0 = x0;
-            op.y0 = y0;
-            op.x1 = x1;
-            op.y1 = y1;
-            op.w = w;
-            op.h = h;
-            op.slot = slot < 0 ? 0 : slot;
-            op.fromX = fromX;
-            op.fromY = fromY;
-            op.fromW = fromW;
-            op.fromH = fromH;
-            op.flipX = flipX;
-            op.flipY = flipY;
-            op.sprite = sprite;
-            op.asset = asset;
-            op.rows = rows;
-            return op;
         }
     }
 }

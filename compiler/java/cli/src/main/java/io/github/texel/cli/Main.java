@@ -3,7 +3,6 @@ package io.github.texel.cli;
 import io.github.texel.core.PngEncoder;
 import io.github.texel.core.PxlFormatException;
 import io.github.texel.core.PxlParser;
-import io.github.texel.core.Renderer;
 
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
@@ -122,13 +121,19 @@ public final class Main {
             }
             if (Files.isDirectory(path)) {
                 int before = sources.size();
-                String problem = collect(path, sources);
+                List<String> skipped = new ArrayList<String>();
+                String problem = collect(path, sources, skipped);
                 if (problem != null) {
                     // 目录存在但**读不动**是 I/O 失败(退出 1)，不是用法错误(退出 2)。
                     // 早先这里把异常吞掉、再因"列表还是空的"报"目录里没有 .pxl 文件"，
                     // 诊断与退出码都指错了原因。
                     ERR.println("texel-compiler: " + escape(input) + ": " + escape(problem));
                     return 1;
+                }
+                // 跳过的候选必须说出来：目录模式"少产出一个 PNG"否则无从发现
+                // （符号链接不被跟随、X.PXL 的大小写不符，2026-11-14 审查 P2）。
+                for (String skip : skipped) {
+                    ERR.println("texel-compiler: 跳过 " + escape(skip));
                 }
                 if (sources.size() == before) {
                     return usage("目录里没有 .pxl 文件: " + escape(input));
@@ -182,8 +187,10 @@ public final class Main {
 
         List<String> conflicts = conflicts(sources, targets);
         if (!conflicts.isEmpty()) {
+            // 与单 target 路径一致：输出冲突是 CLI002（用法错），不能是一条没有码的裸文本
+            // ——下游按 `CLI00x` 前缀分流，裸文本会被当成未知输出（2026-11-14 审查 P2）。
             for (String conflict : conflicts) {
-                ERR.println("texel-compiler: " + conflict);
+                ERR.println("texel-compiler: CLI002: " + conflict);
             }
             return 2;
         }
@@ -202,6 +209,11 @@ public final class Main {
             } catch (IOException failure) {
                 failures++;
                 ERR.println("texel-compiler: " + escape(source.toString()) + ": " + describe(failure));
+            } catch (java.io.UncheckedIOException failure) {
+                // resolver 的宿主读盘失败（权限/锁）：不能包装成 PXL 码，但也不能甩栈迹。
+                failures++;
+                ERR.println("texel-compiler: " + escape(source.toString())
+                        + ": CLI001: I/O 失败: " + escape(failure.getCause().toString()));
             }
         }
         return failures == 0 ? 0 : 1;
@@ -215,10 +227,20 @@ public final class Main {
             throw new PxlFormatException(PxlParser.documentTooLargeCode(),
                     "文档 UTF-8 字节数 " + size + " 超过 " + PxlParser.maxDocumentBytesText());
         }
-        byte[] document = Files.readAllBytes(source);
-        Renderer renderer = PxlParser.parse(document);
-        byte[] rgba = renderer.renderRgba();
-        byte[] png = PngEncoder.encode(renderer.width(), renderer.height(), rgba);
+        // 旧式批量入口同样走**完整的 v1 编译管线**，asset root = 源文件所在目录
+        // （python 侧就是这么做的）。直接用 PxlParser.parse + Raster 渲染没有 asset 解析，
+        // 遇到引用 asset 的 stamp 会崩：Java 抛 NPE，Python 报 PXL009（2026-11-14 审查实测）。
+        Path sourceDir = source.toAbsolutePath().getParent();
+        if (sourceDir == null) {
+            throw new IOException("输入路径没有父目录: " + escape(source.toString()));
+        }
+        io.github.texel.core.PxlCompiler.Compiled compiled =
+                io.github.texel.core.PxlCompiler.compile(
+                        source.getFileName().toString(),
+                        io.github.texel.core.FileAssetResolver.rootedAt(sourceDir),
+                        java.util.Collections.<String, String>emptyMap());
+        byte[] png = PngEncoder.encode(compiled.width(), compiled.height(),
+                compiled.renderRgba());
 
         Path directory = target.toAbsolutePath().getParent();
         if (directory == null) {
@@ -388,14 +410,28 @@ public final class Main {
         return escape(kind + ": " + message);
     }
 
-    /** 递归收集 {@code *.pxl}；失败时返回原因（调用方按 I/O 失败处理），成功返回 null。 */
-    private static String collect(final Path root, final List<Path> into) {
+    /**
+     * 递归收集 {@code *.pxl}；失败时返回原因（调用方按 I/O 失败处理），成功返回 null。
+     *
+     * <p>看起来像 PXL 但被跳过的候选（符号链接、扩展名大小写不符）追加进 {@code skipped}，
+     * 由调用方逐条告知用户——静默跳过会让"目录模式少产出一个 PNG"无从发现。
+     */
+    private static String collect(final Path root, final List<Path> into,
+            final List<String> skipped) {
         try {
             Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
-                    if (attributes.isRegularFile() && hasExtension(file, ".pxl")) {
+                    String name = file.getFileName() == null ? "" : file.getFileName().toString();
+                    boolean regular = attributes.isRegularFile();
+                    if (regular && name.endsWith(".pxl")) {
                         into.add(file);
+                    } else if (name.toLowerCase(java.util.Locale.ROOT).endsWith(".pxl")) {
+                        // 走到这里只有两种可能：不是普通文件（walkFileTree 默认不跟随符号
+                        // 链接），或者扩展名大小写不符（X.PXL 在 Windows 上也会落到这里）。
+                        skipped.add(file.toString() + (regular
+                                ? "（扩展名大小写不符，只认 .pxl）"
+                                : "（不是普通文件：符号链接不被跟随）"));
                     }
                     return FileVisitResult.CONTINUE;
                 }
@@ -406,11 +442,6 @@ public final class Main {
             return failure.getClass().getSimpleName() + ": " + failure.getMessage();
         }
         return null;
-    }
-
-    private static boolean hasExtension(Path file, String extension) {
-        Path name = file.getFileName();
-        return name != null && name.toString().endsWith(extension);
     }
 
     private static Path replaceExtension(Path source) {
@@ -592,6 +623,17 @@ public final class Main {
         }
         if (!check && output == null) {
             return usage("compile 需要一个显式 -o 输出路径");
+        }
+        if (deps != null && !"-".equals(deps)) {
+            // 与 `-o` / `--asset-root` 一致：非法路径是**用法**问题（exit 2）。
+            // 晚一步解析会落到最底下的 InvalidPathException 分支，报成 exit 4
+            // "宿主 I/O 失败"（2026-11-14 审查 P2）。
+            try {
+                Paths.get(deps);
+            } catch (java.nio.file.InvalidPathException invalid) {
+                return usage("--deps 路径含非法字符: " + escape(deps)
+                        + "（" + invalid.getReason() + "）");
+            }
         }
         try {
             io.github.texel.core.FileAssetResolver resolver =

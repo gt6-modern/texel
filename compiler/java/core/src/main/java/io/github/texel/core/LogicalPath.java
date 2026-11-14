@@ -28,33 +28,9 @@ final class LogicalPath {
      * @throws PxlFormatException {@code PXL008}：语法非法、字符串层逃逸、或超出长度上限
      */
     static String normalize(String text) throws PxlFormatException {
-        if (text == null || text.isEmpty()) {
-            throw escape("逻辑路径为空");
-        }
-        for (int index = 0; index < text.length(); index++) {
-            char ch = text.charAt(index);
-            if (!isAllowed(ch)) {
-                throw escape("逻辑路径出现非法字符 " + describe(ch) + "（只允许 a-z 0-9 - _ . /）");
-            }
-        }
-        if (text.charAt(0) == '/') {
-            throw escape("逻辑路径不得以 / 开头: " + text);
-        }
-        if (text.endsWith("/")) {
-            throw escape("逻辑路径不得以 / 结尾: " + text);
-        }
-        String[] segments = text.split("/", -1);
+        String[] segments = checkShape(text);
         java.util.List<String> stack = new java.util.ArrayList<String>();
         for (String segment : segments) {
-            if (segment.isEmpty()) {
-                throw escape("逻辑路径含空段: " + text);
-            }
-            if (segment.length() > MAX_SEGMENT) {
-                throw escape("路径段超过 " + MAX_SEGMENT + " 字节: " + segment);
-            }
-            if ((".").equals(segment)) {
-                throw escape("逻辑路径不得出现 . 段: " + text);
-            }
             if (("..").equals(segment)) {
                 if (stack.isEmpty()) {
                     throw escape("逻辑路径规范化时弹出根（字符串层逃逸）: " + text);
@@ -103,6 +79,23 @@ final class LogicalPath {
      * 但相对 asset root 会弹出根。R1 时还不知道声明文档是谁，所以这里只验字符集与段形状。
      */
     static String syntaxOnly(String text) throws PxlFormatException {
+        checkShape(text);
+        // 这里不按原始文本判总长度：规范限制的是**规范化之后**的结果（§5.1），
+        // 而 a/../a/../…/x 这种能抵消的长写法规范化后是合法的短路径。
+        // 按原始长度判会让 Java 报 PXL008 而 Python 成功（发布态复核 F18）。结果长度由 normalize() 检查。
+        return text;
+    }
+
+    /**
+     * 只做**形状**校验：非空、字符集、前导/尾随斜杠、空段、段长、`.` 段。
+     *
+     * <p>{@link #normalize} 与 {@link #syntaxOnly} 原来各自把这套检查抄了一遍（23 行），
+     * 改一条规则就得记住改两处；两者真正的差别只在"之后做什么"——前者还要处理
+     * {@code ..} 并判规范化后的总长，后者到此为止。
+     *
+     * @return 按 {@code /} 切开的段（含 {@code ..}，由调用方决定怎么处理）
+     */
+    private static String[] checkShape(String text) throws PxlFormatException {
         if (text == null || text.isEmpty()) {
             throw escape("逻辑路径为空");
         }
@@ -126,14 +119,11 @@ final class LogicalPath {
             if (segment.length() > MAX_SEGMENT) {
                 throw escape("路径段超过 " + MAX_SEGMENT + " 字节: " + segment);
             }
-            if (".".equals(segment)) {
+            if ((".").equals(segment)) {
                 throw escape("逻辑路径不得出现 . 段: " + text);
             }
         }
-        // 这里不按原始文本判总长度：规范限制的是**规范化之后**的结果（§5.1），
-        // 而 a/../a/../…/x 这种能抵消的长写法规范化后是合法的短路径。
-        // 按原始长度判会让 Java 报 PXL008 而 Python 成功（发布态复核 F18）。结果长度由 normalize() 检查。
-        return text;
+        return segments;
     }
 
     static boolean isAllowed(char ch) {

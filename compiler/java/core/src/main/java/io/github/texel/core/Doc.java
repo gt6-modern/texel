@@ -73,8 +73,11 @@ final class Doc {
      *
      * <p>校验器保证 {@code kind} 恒为八条之一；未知 op 在阶段 8 就被 {@code PXL004}
      * 挡掉了，不会进到这里。
+     *
+     * <p>非 final：校验期的 {@code Validator.RawOp} 直接继承它，避免把这十几个字段
+     * 在两边各写一遍、再用一个逐字段拷贝的方法衔接（那样加一个字段要改三处）。
      */
-    static final class Op {
+    static class Op {
 
         final String kind;
 

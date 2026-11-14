@@ -67,8 +67,9 @@ def _safe_resolve(path):
         return None
 
 
-def _usage(message):
-    sys.stderr.write("texel: CLI004: " + message + "\n")
+def _usage(message, code="CLI004"):
+    """用法类错误。默认 CLI004；输出冲突类由调用方指定 CLI002（与单 target 路径一致）。"""
+    sys.stderr.write("texel: " + code + ": " + message + "\n")
     return EXIT_USAGE
 
 
@@ -307,9 +308,12 @@ def _run_legacy(args):
             sys.stderr.write("texel: I/O 失败: 无法解析输出路径: " + str(target) + chr(10))
             return EXIT_IO
         if key in sources_resolved:
-            return _usage("输出路径与输入相同: " + str(target))
+            # 输出冲突是 CLI002，不是 CLI004：单 target 路径（compile/check）对同一类错误
+            # 用的就是 CLI002，Java 侧的批量入口也已统一。裸 CLI004 会让下游按码分流时
+            # 把"会踩坏源文件"当成普通用法错（2026-11-14 审查 P2）。
+            return _usage("输出路径与输入相同: " + str(target), code="CLI002")
         if key in targets_seen:
-            return _usage("两个输入映射到同一个输出: " + str(target))
+            return _usage("两个输入映射到同一个输出: " + str(target), code="CLI002")
         targets_seen[key] = source
 
     failures = 0
