@@ -32,6 +32,7 @@ jobs:
           distribution: liberica
           java-version: "21"
       - name: Validate tag and metadata
+        id: version
         shell: bash
         run: |
           python tools/check_release_metadata.py
@@ -40,6 +41,8 @@ jobs:
             echo "tag $GITHUB_REF_NAME does not match VERSION $version" >&2
             exit 1
           fi
+          # 后续步骤（SBOM 文件名等）从这里取版本，不再把 0.1.0 写死在工作流里。
+          echo "value=$version" >> "$GITHUB_OUTPUT"
       - name: Generate corpus and run Python gates
         run: |
           python spec/conformance/tools/gen_cases.py --all
@@ -72,7 +75,7 @@ jobs:
         with:
           path: dist/release
           format: spdx-json
-          output-file: dist/release/texel-0.1.0.spdx.json
+          output-file: dist/release/texel-${{ steps.version.outputs.value }}.spdx.json
       - uses: actions/attest-build-provenance@v2
         with:
           subject-path: dist/release/*
@@ -97,7 +100,10 @@ jobs:
           if-no-files-found: error
 
   publish-pypi:
-    if: github.ref_type == 'tag' && inputs.dry_run != true
+    # 真正的发布只发生在 tag 上：tag 推送，或手动触发且 dry_run == false（且当前 ref 是 tag）。
+    # 原来写的是 `inputs.dry_run != true`：tag 推送时 inputs 为空，靠 `null != true` 恰好成立，
+    # 语义靠巧合。这里改成显式判断，两个入口的行为都写死。
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.dry_run == false)
     needs: build
     runs-on: ubuntu-latest
     environment: pypi
@@ -114,7 +120,10 @@ jobs:
           skip-existing: false
 
   publish-central:
-    if: github.ref_type == 'tag' && inputs.dry_run != true
+    # 真正的发布只发生在 tag 上：tag 推送，或手动触发且 dry_run == false（且当前 ref 是 tag）。
+    # 原来写的是 `inputs.dry_run != true`：tag 推送时 inputs 为空，靠 `null != true` 恰好成立，
+    # 语义靠巧合。这里改成显式判断，两个入口的行为都写死。
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.dry_run == false)
     needs: build
     runs-on: ubuntu-latest
     environment: maven-central
@@ -136,7 +145,10 @@ jobs:
             "https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC&name=texel-${GITHUB_REF_NAME}"
 
   github-release:
-    if: github.ref_type == 'tag' && inputs.dry_run != true
+    # 真正的发布只发生在 tag 上：tag 推送，或手动触发且 dry_run == false（且当前 ref 是 tag）。
+    # 原来写的是 `inputs.dry_run != true`：tag 推送时 inputs 为空，靠 `null != true` 恰好成立，
+    # 语义靠巧合。这里改成显式判断，两个入口的行为都写死。
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.dry_run == false)
     needs: [publish-pypi, publish-central]
     runs-on: ubuntu-latest
     permissions:
