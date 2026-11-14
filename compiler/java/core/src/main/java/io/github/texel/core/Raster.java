@@ -366,42 +366,22 @@ final class Raster {
     }
 
     private static void composeNormal(byte[] destination, byte[] source) {
-        for (int offset = 0; offset < source.length; offset += 4) {
-            int sr = source[offset] & 0xFF;
-            int sg = source[offset + 1] & 0xFF;
-            int sb = source[offset + 2] & 0xFF;
-            int sa = source[offset + 3] & 0xFF;
-            int dr = destination[offset] & 0xFF;
-            int dg = destination[offset + 1] & 0xFF;
-            int db = destination[offset + 2] & 0xFF;
-            int da = destination[offset + 3] & 0xFF;
-
-            int transparency = 255 - sa;
-            int aNum = sa * 255 + da * transparency;
-            if (aNum == 0) {
-                // 上下都不可见：谁有颜色就留谁的（§7 第 3 条）。
-                if ((sr | sg | sb | sa) == 0) {
-                    destination[offset + 3] = 0;
-                } else {
-                    destination[offset] = (byte) sr;
-                    destination[offset + 1] = (byte) sg;
-                    destination[offset + 2] = (byte) sb;
-                    destination[offset + 3] = 0;
-                }
-                continue;
-            }
-            int half = aNum / 2;
-            int outR = (sr * sa * 255 + dr * da * transparency + half) / aNum;
-            int outG = (sg * sa * 255 + dg * da * transparency + half) / aNum;
-            int outB = (sb * sa * 255 + db * da * transparency + half) / aNum;
-            destination[offset] = (byte) outR;
-            destination[offset + 1] = (byte) outG;
-            destination[offset + 2] = (byte) outB;
-            destination[offset + 3] = (byte) ((aNum + 127) / 255);
-        }
+        composeBlend(destination, source, false);
     }
 
     private static void composeMultiply(byte[] destination, byte[] source) {
+        composeBlend(destination, source, true);
+    }
+
+    /**
+     * {@code normal} 与 {@code multiply} 的共用骨架（§6.3 / §6.4）。
+     *
+     * <p>两者只差"源色"：multiply 先把源色乘进目标色（{@code mc = div255(s * d)}），
+     * normal 直接用源色。透明短路、{@code aNum} 归一、alpha 取整逐字相同——§6.4 的原文
+     * 就是"用与 normal 完全相同的公式合成，把 {@code sc} 换成 {@code mc} 即可"，
+     * 所以这里就是一个参数。上一版是三份几乎逐行相同的循环，改 §7 第 3 条时漏一处就会分叉。
+     */
+    private static void composeBlend(byte[] destination, byte[] source, boolean multiply) {
         for (int offset = 0; offset < source.length; offset += 4) {
             int sr = source[offset] & 0xFF;
             int sg = source[offset + 1] & 0xFF;
@@ -412,30 +392,28 @@ final class Raster {
             int db = destination[offset + 2] & 0xFF;
             int da = destination[offset + 3] & 0xFF;
 
-            int mr = div255(sr * dr);
-            int mg = div255(sg * dg);
-            int mb = div255(sb * db);
             int transparency = 255 - sa;
             int aNum = sa * 255 + da * transparency;
             if (aNum == 0) {
-                if ((sr | sg | sb | sa) == 0) {
-                    destination[offset + 3] = 0;
-                } else {
-                    // 底下没有东西可乘，源像素原样透过（§6.4）。
+                // 上下都不可见：谁有颜色就留谁的（§7 第 3 条）。multiply 在同一点是
+                // "底下没有东西可乘，源像素原样透过"（§6.4）——两个分支逐字节相同。
+                if ((sr | sg | sb | sa) != 0) {
                     destination[offset] = (byte) sr;
                     destination[offset + 1] = (byte) sg;
                     destination[offset + 2] = (byte) sb;
-                    destination[offset + 3] = 0;
                 }
+                destination[offset + 3] = 0;
                 continue;
             }
+            int mcR = multiply ? div255(sr * dr) : sr;
+            int mcG = multiply ? div255(sg * dg) : sg;
+            int mcB = multiply ? div255(sb * db) : sb;
             int half = aNum / 2;
-            int outR = (mr * sa * 255 + dr * da * transparency + half) / aNum;
-            int outG = (mg * sa * 255 + dg * da * transparency + half) / aNum;
-            int outB = (mb * sa * 255 + db * da * transparency + half) / aNum;
-            destination[offset] = (byte) outR;
-            destination[offset + 1] = (byte) outG;
-            destination[offset + 2] = (byte) outB;
+            destination[offset] = (byte) ((mcR * sa * 255 + dr * da * transparency + half) / aNum);
+            destination[offset + 1] =
+                    (byte) ((mcG * sa * 255 + dg * da * transparency + half) / aNum);
+            destination[offset + 2] =
+                    (byte) ((mcB * sa * 255 + db * da * transparency + half) / aNum);
             destination[offset + 3] = (byte) ((aNum + 127) / 255);
         }
     }

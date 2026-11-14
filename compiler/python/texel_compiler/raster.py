@@ -282,11 +282,26 @@ def blend_layer(accumulator, layer, blend, width, height):
 
 def _blend_normal(dst, src, count):
     """§6.3。aNum == 0 的两个分支是「不可见颜色」语义的算术落点(§7)。"""
+    _blend_shared(dst, src, count, combine=None, opaque_fast_path=True)
+
+
+def _blend_multiply(dst, src, count):
+    """§6.4:先 div255(sc * dc),再用与 normal 相同的公式合成。"""
+    _blend_shared(dst, src, count, combine=div255)
+
+
+def _blend_shared(dst, src, count, combine, opaque_fast_path=False):
+    """normal / multiply 的共用骨架(§6.3 / §6.4)。
+
+    两者只差"源色":multiply 先把源色乘进目标色(`mc = div255(sc*dc)`),normal 直接用源色;
+    透明短路、`aNum` 归一、alpha 取整逐字相同 —— §6.4 原文即"把 sc 换成 mc 即可"。
+    `opaque_fast_path` 保留 normal 原有的"不透明源覆盖空累加器"捷径(结果等价,省一次长除)。
+    """
     for index in range(count):
         base = index * 4
         sa = src[base + 3]
         da = dst[base + 3]
-        if sa == 255 and da == 0:
+        if opaque_fast_path and sa == 255 and da == 0:
             # 快路径:不透明源覆盖空累加器,结果就是源(ao = 255,outc = sc)。
             dst[base] = src[base]
             dst[base + 1] = src[base + 1]
@@ -305,36 +320,17 @@ def _blend_normal(dst, src, count):
                 dst[base + 3] = 0
             continue
         half = a_num // 2
-        dst[base] = (src[base] * sa * 255 + dst[base] * da * t + half) // a_num
-        dst[base + 1] = (src[base + 1] * sa * 255 + dst[base + 1] * da * t + half) // a_num
-        dst[base + 2] = (src[base + 2] * sa * 255 + dst[base + 2] * da * t + half) // a_num
-        dst[base + 3] = div255(a_num)
-
-
-def _blend_multiply(dst, src, count):
-    """§6.4:先 div255(sc * dc),再用与 normal 相同的公式合成。"""
-    for index in range(count):
-        base = index * 4
-        sa = src[base + 3]
-        da = dst[base + 3]
-        t = 255 - sa
-        a_num = sa * 255 + da * t
-        if a_num == 0:
-            if src[base] == 0 and src[base + 1] == 0 and src[base + 2] == 0:
-                dst[base + 3] = 0
-            else:
-                dst[base] = src[base]
-                dst[base + 1] = src[base + 1]
-                dst[base + 2] = src[base + 2]
-                dst[base + 3] = 0
-            continue
-        half = a_num // 2
-        mr = div255(src[base] * dst[base])
-        mg = div255(src[base + 1] * dst[base + 1])
-        mb = div255(src[base + 2] * dst[base + 2])
-        dst[base] = (mr * sa * 255 + dst[base] * da * t + half) // a_num
-        dst[base + 1] = (mg * sa * 255 + dst[base + 1] * da * t + half) // a_num
-        dst[base + 2] = (mb * sa * 255 + dst[base + 2] * da * t + half) // a_num
+        if combine is None:
+            dst[base] = (src[base] * sa * 255 + dst[base] * da * t + half) // a_num
+            dst[base + 1] = (src[base + 1] * sa * 255 + dst[base + 1] * da * t + half) // a_num
+            dst[base + 2] = (src[base + 2] * sa * 255 + dst[base + 2] * da * t + half) // a_num
+        else:
+            dst[base] = ((combine(src[base] * dst[base]) * sa * 255
+                          + dst[base] * da * t + half) // a_num)
+            dst[base + 1] = ((combine(src[base + 1] * dst[base + 1]) * sa * 255
+                              + dst[base + 1] * da * t + half) // a_num)
+            dst[base + 2] = ((combine(src[base + 2] * dst[base + 2]) * sa * 255
+                              + dst[base + 2] * da * t + half) // a_num)
         dst[base + 3] = div255(a_num)
 
 

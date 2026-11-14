@@ -233,6 +233,9 @@ public final class Main {
             } finally {
                 stream.close();
             }
+            // 与单 target 路径一致：先刷盘再原子改名，掉电不留半截 PNG
+            // （批量路径原来只有原子改名、没有 fsync，2026-11-14 审查 P2）。
+            syncFile(temporary);
             try {
                 Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE,
                         StandardCopyOption.REPLACE_EXISTING);
@@ -250,6 +253,46 @@ public final class Main {
                     // 清理失败不该掩盖原始错误。
                 }
             }
+        }
+    }
+
+    /**
+     * 把依赖清单原子写入 {@code deps}。
+     *
+     * <p>先写临时文件再原子替换：直接 {@code Files.write} 会截断**已有 inode**，
+     * 若清单路径是某个源文件的硬链接，源文件内容就没了（词法路径检查抓不到）。
+     *
+     * @return 0 成功；4 表示 I/O 失败（已就地打印 {@code CLI003}）
+     */
+    private static int writeDependencies(String deps,
+            java.util.List<io.github.texel.core.PxlCompiler.Dependency> dependencies) {
+        StringBuilder text = new StringBuilder();
+        for (io.github.texel.core.PxlCompiler.Dependency item : dependencies) {
+            text.append(item.toTsv()).append((char) 10);
+        }
+        Path depsFile = Paths.get(deps).toAbsolutePath();
+        Path parent = depsFile.getParent();
+        Path temporary = null;
+        try {
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            temporary = Files.createTempFile(parent, ".texel-deps-", ".tmp");
+            Files.write(temporary,
+                    text.toString().getBytes(java.nio.charset.Charset.forName("UTF-8")));
+            syncFile(temporary);
+            atomicMove(temporary, depsFile);
+            return 0;
+        } catch (IOException failure) {
+            if (temporary != null) {
+                try {
+                    Files.deleteIfExists(temporary);
+                } catch (IOException ignored) {
+                    // 清理失败不掩盖原始错误。
+                }
+            }
+            ERR.println("texel-compiler: CLI003: I/O 失败: " + escape(failure.toString()));
+            return 4;
         }
     }
 
@@ -289,10 +332,31 @@ public final class Main {
             } catch (java.nio.file.NoSuchFileException missing) {
                 probe = probe.getParent();
             } catch (IOException failure) {
-                return true;
+                // 只有"链接层数过多"才是环。把任意 IOException 都判成环会把
+                // AccessDenied / 共享冲突 报成 CLI002"包含符号链接环"，真实原因被掩盖
+                // （2026-11-14 审查 P2）。
+                return isSymlinkLoop(failure);
             }
         }
         return false;
+    }
+
+    /** 宿主的"链接层数过多"错误：POSIX 给 FileSystemLoopException，Windows 只剩消息可认。 */
+    private static boolean isSymlinkLoop(IOException failure) {
+        if (failure instanceof java.nio.file.FileSystemLoopException) {
+            return true;
+        }
+        String message = failure.getMessage();
+        if (message == null) {
+            return false;
+        }
+        // POSIX 的 ELOOP 由 JDK 转成上面那个异常；Windows 的 ERROR_CANT_RESOLVE_FILENAME
+        // (1921) 只能靠消息识别，且中英文措辞不同。除此以外一律不是环。
+        String lower = message.toLowerCase(java.util.Locale.ROOT);
+        return lower.contains("too many levels of symbolic links")
+                || lower.contains("cannot resolve")
+                || message.contains("循环链接")
+                || message.contains("无法解析文件名");
     }
     /** 解析链接后的真实形状：不存在的叶子先解析最近的已存在祖先，再补剩余路径。 */
     private static Path realish(Path path) {
@@ -586,35 +650,13 @@ public final class Main {
                     return usage("CLI002: 输出与清单指向同一路径: " + escape(output));
                 }
             }
-            if (deps != null && !"-".equals(deps)) {
-                StringBuilder text = new StringBuilder();
-                for (io.github.texel.core.PxlCompiler.Dependency item : compiled.dependencies()) {
-                    text.append(item.toTsv()).append((char) 10);
-                }
-                // 先写临时文件再原子替换：直接 Files.write 会截断**已有 inode**，
-                // 若 deps 是某个源文件的硬链接，源文件内容就没了（路径检查抓不到）。
-                Path depsFile = Paths.get(deps).toAbsolutePath();
-                if (depsFile.getParent() != null) {
-                    Files.createDirectories(depsFile.getParent());
-                }
-                Path depsTemporary = Files.createTempFile(depsFile.getParent(), ".texel-deps-", ".tmp");
-                try {
-                    Files.write(depsTemporary,
-                            text.toString().getBytes(java.nio.charset.Charset.forName("UTF-8")));
-                    syncFile(depsTemporary);
-                    atomicMove(depsTemporary, depsFile);
-                } catch (IOException failure) {
-                    // 失败要清掉自己的临时文件：留着 .texel-deps-*.tmp 是"失败还污染目录"
-                    // （发布态复核 F-R6-06）。
-                    try {
-                        Files.deleteIfExists(depsTemporary);
-                    } catch (IOException ignored) {
-                        // 清理失败不掩盖原始错误。
-                    }
-                    // PRD §13.3 CLI003：临时文件/同步/原子替换失败，就地报码并退出 4。
-                    ERR.println("texel-compiler: CLI003: I/O 失败: "
-                            + escape(failure.toString()));
-                    return 4;
+            if (check && deps != null && !"-".equals(deps)) {
+                // check 不产出 PNG，清单就是它唯一的产物（集成层靠 `check --deps` 收集依赖）。
+                // 非 check 时清单改到 PNG 成功之后再落盘：否则 PNG 写失败会留下
+                // "清单已更新、产物没更新"的半份状态（2026-11-14 审查 P2）。
+                int code = writeDependencies(deps, compiled.dependencies());
+                if (code != 0) {
+                    return code;
                 }
             }
             // check 也要走完整编码：只渲染不编码时，编码器的失败对 check 不可见
@@ -642,6 +684,13 @@ public final class Main {
                 }
                 ERR.println("texel-compiler: CLI003: I/O 失败: " + escape(failure.toString()));
                 return 4;
+            }
+            // PNG 已落盘，再写清单：两个产物都成功才算这条命令成功。
+            if (deps != null && !"-".equals(deps)) {
+                int code = writeDependencies(deps, compiled.dependencies());
+                if (code != 0) {
+                    return code;
+                }
             }
             return 0;
         } catch (io.github.texel.core.PxlFormatException failure) {

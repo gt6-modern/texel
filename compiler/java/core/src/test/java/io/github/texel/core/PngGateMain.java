@@ -60,9 +60,18 @@ public final class PngGateMain {
         try {
             for (Path item : stream) {
                 String name = item.getFileName().toString();
-                if (name.startsWith("neg-png-") || name.indexOf("iccp-crc") >= 0) {
-                    names.add(name);
+                // 按**目录结构**划集合：负例目录里有 input.png，且 expected.error 是 PXL006。
+                // 以前用名字前缀 `neg-png-`，改个名就静默退出集合，命名约定一漂移判据就消失，
+                // 而且会与 Python 侧的结构化判定不一致（2026-11-14 审查 P2）。
+                Path input = item.resolve("input.png");
+                Path error = item.resolve("expected.error");
+                if (!Files.isRegularFile(input) || !Files.isRegularFile(error)) {
+                    continue;
                 }
+                if (!"PXL006".equals(new String(Files.readAllBytes(error), UTF8).trim())) {
+                    continue;
+                }
+                names.add(name);
             }
         } finally {
             stream.close();
