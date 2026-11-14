@@ -277,7 +277,12 @@ def _run_legacy(args):
     for item in inputs:
         path = Path(item)
         if path.is_dir():
-            found = sorted(path.rglob("*.pxl"), key=_sort_key)
+            found = []
+            skipped = []
+            _collect_pxl(path, found, skipped)
+            # 跳过的候选必须说出来：目录模式"少产出一个 PNG"否则无从发现。
+            for note in skipped:
+                sys.stderr.write("texel: 跳过 " + note + "\n")
             if not found:
                 return _usage("目录里没有 .pxl 文件: " + item)
             sources.extend(found)
@@ -330,6 +335,31 @@ def _run_legacy(args):
             failures += 1
             sys.stderr.write("texel: " + str(source) + ": I/O 失败: " + str(failure) + "\n")
     return EXIT_OK if failures == 0 else EXIT_BATCH_FAILED
+
+
+def _collect_pxl(root, into, skipped):
+    """递归收集 ``*.pxl``；跳过的候选逐条写进 ``skipped``。
+
+    语义与 Java 侧 ``Main.collect`` 逐条对齐（2026-11-14 审查：两边曾经一个跳过符号链接、
+    另一个靠 ``rglob`` 跟着走，同一棵树两个 CLI 会产出不同的 PNG 集合）：
+
+    * **不跟随符号链接**（``os.walk(followlinks=False)``，与 ``walkFileTree`` 默认一致）；
+    * 只认字面 ``.pxl``；``X.PXL`` 这类大小写不符的候选报出来而不是静默忽略；
+    * 结果按路径的 UTF-8 字节序排序（§9：不得依赖文件系统遍历顺序）。
+    """
+    found = []
+    for current, dirnames, filenames in os.walk(str(root), followlinks=False):
+        dirnames.sort(key=_sort_key)
+        for name in sorted(filenames, key=_sort_key):
+            path = Path(current) / name
+            if name.endswith(".pxl"):
+                if path.is_symlink() or not path.is_file():
+                    skipped.append(str(path) + "（不是普通文件：符号链接不被跟随）")
+                else:
+                    found.append(path)
+            elif name.lower().endswith(".pxl"):
+                skipped.append(str(path) + "（扩展名大小写不符，只认 .pxl）")
+    into.extend(sorted(found, key=_sort_key))
 
 
 def _sort_key(path):
