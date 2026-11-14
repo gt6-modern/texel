@@ -76,7 +76,11 @@ jobs:
           path: dist/release
           format: spdx-json
           output-file: dist/release/texel-${{ steps.version.outputs.value }}.spdx.json
+      # 供应链证明只在公开仓库可用：私有仓库 + 组织免费计划会被 GitHub 直接拒绝
+      # （Release run #4 实测："Feature not available for the gt6-modern organization"）。
+      # 它不该挡住构建与发布，所以按仓库可见性跳过；公开后自动恢复。
       - uses: actions/attest-build-provenance@v2
+        if: github.event.repository.private == false
         with:
           subject-path: dist/release/*
       - uses: actions/upload-artifact@v4
