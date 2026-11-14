@@ -8,7 +8,7 @@ package io.github.texel.core;
  * {@link PxlFormatException}，调用方靠 {@link PxlFormatException#code()} 分辨。
  *
  * <p>返回的 {@link Renderer} 是不透明句柄：文档模型本身不暴露，避免内部数组与可变
- * 集合泄漏出去（AGENTS.md §4.1）。
+ * 集合泄漏出去（fail-closed：句柄不暴露可变内部状态）。
  */
 public final class PxlParser {
 

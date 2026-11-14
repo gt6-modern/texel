@@ -257,11 +257,14 @@ def _clipped(width, height, x, y, w, h):
 
 
 def _check_version(value):
-    """§12：`version` 必须是**整数值的 1**；非整数 / 不可表示一律 PXL001。
+    """Version dispatch：`version` 必须是**整数值的 1**。
 
-    这里**不能**走 `_require_int` + `%d`：`1.5` 会得到 PXL002（那属于数值域，
-    而 §12 把 version 的取值归为枚举越界），`1e99999` 会先被格式化成
-    10 万位的整数串而抛 ValueError（连错误码都没有）。两种都与实现不符。
+    分派规则(本规范开头 Version dispatch 与 §12)：非整数 / 不可表示 / 负数 / 超域
+    一律 PXL001；落在分派域 `0..65535` 内但不等于 1 的整数报 PXL007。
+
+    这里**不能**走 `_require_int` + `%d`：`1.5` 会得到 PXL002(那属于数值域，
+    而 version 的取值归版本分派)，`1e99999` 会先被格式化成 10 万位的整数串而抛
+    ValueError(连错误码都没有)。两种都与实现不符。
     """
     if isinstance(value, bool) or not _is_number(value):
         _fail("PXL001", "version 的类型不是数字")
@@ -279,8 +282,10 @@ def _check_version(value):
         integral = int(value)
         if abs(integral) > 2 ** 63:
             _fail("PXL001", "version 超出 64 位可表示范围(§12 fail-closed)")
+    if not 0 <= integral <= 65535:
+        _fail("PXL001", "version 落在分派域 0..65535 之外(负数或超域)")
     if integral != 1:
-        _fail("PXL001", "version 不等于 1(§12 fail-closed)")
+        _fail("PXL007", "version = %d 在分派域内但本 compiler 不支持" % integral)
 
 
 def _require_int(mapping, key, where):

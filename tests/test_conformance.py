@@ -7,7 +7,7 @@
 2. ``expected.pixels.sha256`` 与解码出的 RGBA8 流一致;
 3. 抽取器输出与 ``expected.pxl`` **逐字节相同**;
 4. ``expected.pxl`` 自身合规(UTF-8 无 BOM、LF、末尾恰一个换行、无行尾空白);
-5. **压缩版与逐像素版渲染后逐像素相同**(AGENTS.md §3.3 的判定方式);
+5. **压缩版与逐像素版渲染后逐像素相同**(`AGENTS.md` 契约 5 的判定方式);
 6. 抽取器两跑零 diff(§9)。
 
 回渲判定用 ``tests/pxl_oracle.py``——那是按规范另写的独立实现,不与抽取器共享代码。
@@ -518,7 +518,9 @@ class IndexSchemaTest(unittest.TestCase):
                          % (len(on_disk), checked))
 
     def test_negative_rows_declare_code_and_side(self):
-        allowed = re.compile(r"^PXL00[1-6]\((渲染侧|抽取侧)\):")
+        # current 的错误码止于 `PXL012`(Extension §11.1):PXL001..PXL006 属 core,
+        # PXL007..PXL012 属 Extension,负例行两类都会出现。
+        allowed = re.compile(r"^PXL(?:00[1-9]|01[0-2])\((渲染侧|抽取侧)\):")
         problems = [
             (r["case"], r["covers"])
             for r in self._cases()
@@ -571,7 +573,7 @@ class IndexSchemaTest(unittest.TestCase):
             if not directory.is_dir():
                 continue
             checked.append(case)
-            side = re.match(r"^PXL00[1-6]\((渲染侧|抽取侧)\):", row["covers"]).group(1)
+            side = re.match(r"^PXL(?:00[1-9]|01[0-2])\((渲染侧|抽取侧)\):", row["covers"]).group(1)
             has_pxl = (directory / "input.pxl").is_file()
             has_png = (directory / "input.png").is_file()
             if has_pxl and has_png:
@@ -624,7 +626,7 @@ class IndexSchemaTest(unittest.TestCase):
 
         此前 Python 门禁对批量用例**一条判据都没有**：删掉
         `real-fluid-source-255` 的一个成员目录，`-p test_conformance.py` 仍然
-        38 tests OK（Java harness 会红）。单跑 AGENTS.md §6 列的那条 python
+        38 tests OK（Java harness 会红）。单跑 `AGENTS.md` 契约 2(确定性)列的那条 python
         命令时这就是假绿。
         """
         problems = []
@@ -913,7 +915,7 @@ class RoundTripTest(unittest.TestCase):
                     )
 
     def test_compressed_and_raw_render_identically(self):
-        """压缩版与逐像素版渲染结果必须逐像素相同(AGENTS.md §3.3)。"""
+        """压缩版与逐像素版渲染结果必须逐像素相同(`AGENTS.md` 契约 5)。"""
         # 同字节必然同结论：按 PNG 字节去重后跑代表；黄金比对另由全量判据覆盖。
         for case in unique_units():
             with self.subTest(case=case):

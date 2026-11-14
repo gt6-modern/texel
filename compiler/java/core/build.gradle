@@ -9,7 +9,7 @@
 def repoRoot = rootProject.ext.repoRoot
 
 dependencies {
-    // 故意为空：core 不允许任何运行时依赖（AGENTS.md §4.1）。
+    // 故意为空：core 不允许任何运行时依赖（`AGENTS.md` 契约 7）。
 }
 
 tasks.register('unitTests', JavaExec) {

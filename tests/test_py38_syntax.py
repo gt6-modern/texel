@@ -1,4 +1,4 @@
-"""Python 3.8 兼容性守卫(AGENTS.md §4.2)。
+"""Python 3.8 兼容性守卫(`AGENTS.md` 契约 7)。
 
 **本机有 3.8.10**:``py -0p`` 列出 ``-3.8-64``,验收时应当真跑
 ``py -3.8-64 -m unittest discover -s tests`` —— 那是唯一的执行级证据。

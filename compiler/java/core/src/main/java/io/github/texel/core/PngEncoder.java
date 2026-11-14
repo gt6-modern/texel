@@ -8,7 +8,7 @@ import java.util.zip.Deflater;
  * PNG 编码器（规范 §10）。
  *
  * <p>只用 {@code java.util.zip.Deflater} + 自写的 chunk / CRC 封装：core 不允许
- * {@code java.desktop}，所以 {@code javax.imageio} 与 AWT 都不能用（AGENTS.md §4.1）。
+ * {@code java.desktop}，所以 {@code javax.imageio} 与 AWT 都不能用（`AGENTS.md` 契约 7）。
  *
  * <p>输出约定全部钉死，为的是"同一实现、同一输入，两次写出的 PNG 必须字节相同"：
  *

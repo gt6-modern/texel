@@ -21,11 +21,13 @@ Thank you for improving Texel. By participating, you agree to the [Code of Condu
 
 ```console
 python spec/conformance/tools/gen_cases.py --all
+python spec/conformance/tools/check_spec_sync.py
+python tools/check_release_metadata.py
 python -m unittest discover -s tests
 python spec/conformance/tools/python_ref_verify.py
 python compiler/python/tools/conformance.py
 cd compiler/java
-./gradlew check -Ppython=python
+./gradlew --no-daemon clean check -Ppython=python
 ```
 
 Pull requests must explain the behavior change, link the corresponding specification clauses and corpus cases, update both language implementations when applicable, and update both English and Chinese public documentation.

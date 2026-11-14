@@ -68,12 +68,30 @@ class CorpusIndexTest(unittest.TestCase):
             self.assertEqual(indexed, case_dirs(root), suite)
 
     def test_no_wire_version_zero_documents(self):
+        """语料里不得出现 `"version": 0`。
+
+        唯一例外是**显式钉住 v0 必须被拒**的负例:目录在 `negative/` 下,
+        且 `expected.error` 为 `PXL007`(域内但不支持的版本)。其余任何位置出现
+        version 0,都说明有一份语料在按旧版本号写出。
+        """
         pattern = re.compile(rb'"version"\s*:\s*0(?:\D|$)')
         offenders = []
+        allowed = []
         for path in CONF.rglob("*.pxl"):
-            if pattern.search(path.read_bytes()):
+            if not pattern.search(path.read_bytes()):
+                continue
+            case_dir = path.parent
+            error = case_dir / "expected.error"
+            in_negative = "negative" in case_dir.parts
+            rejected = (in_negative and error.is_file()
+                        and error.read_text(encoding="utf-8").strip() == "PXL007")
+            if rejected:
+                allowed.append(path.relative_to(ROOT).as_posix())
+            else:
                 offenders.append(path.relative_to(ROOT).as_posix())
         self.assertEqual([], offenders)
+        # 空集合守卫:这个例外必须真的被至少一条用例用上,不能退化成"谁都能过"。
+        self.assertTrue(allowed, "没有任何负例覆盖 v0 必须被拒绝的情形")
 
     def test_negative_cases_have_single_error_code(self):
         for suite, root in SUITES.items():

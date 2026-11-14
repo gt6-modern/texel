@@ -16,8 +16,10 @@
 
 顶层**没有 `version` 成员**。它不是“某个版本的值不对”,而是**连分派都做不到**:§2 的三行分派表
 只能覆盖“读到了 version”的三种情形,读不到就不再往下走,直接 `PXL001`(阶段 D)。
-这条与 v0 的 `negative/neg-version-nonzero` 是**两件事**:那条是“读到 0 以外的值、由 v0 拒绝”,
-这条是“根本读不到版本、由分派前置条件拒绝”。
+这条与「读到 `0` 或其它域内整数、由实现按 `PXL007` 拒绝」是**两件事**:后者见
+`negative/neg-version-in-domain-unsupported`(域内不支持 → `PXL007`)与
+`negative/neg-version-negative` / `negative/neg-version-over-domain`(域外 → `PXL001`);
+本条是「根本读不到版本、由分派前置条件拒绝」→ `PXL001`。
 
 文档其余部分与 `single-fill-4x4` 逐字节相同(只少了 `version` 这一行),因此本目录只违反一条规则:
 凡 `version` 之外的检查(`format` 值、成员类型、token、数值域、palette、slot)在本条上**都成立**,

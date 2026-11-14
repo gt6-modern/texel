@@ -442,7 +442,9 @@ public final class ConformanceMain {
                 FAILURES.add(casePath + "：size 取值非法 " + size);
             }
             if (casePath.startsWith("negative/")) {
-                if (!row.get("covers").matches("^PXL00[1-6]\\((渲染侧|抽取侧)\\):.*")) {
+                // current 的错误码止于 PXL012（Extension §11.1）：PXL001..PXL006 属 core，
+                // PXL007..PXL012 属 Extension，负例行两类都出现。
+                if (!row.get("covers").matches("^PXL(?:00[1-9]|01[0-2])\\((渲染侧|抽取侧)\\):.*")) {
                     FAILURES.add(casePath + "：负例 covers 必须以 PXL00N(侧): 开头");
                 }
                 // §13.3：负例没有 expected.pxl，`size` / `colors` 在那里是**无法校验的
@@ -1342,7 +1344,7 @@ public final class ConformanceMain {
             return null;
         }
         String code = readFully(file).trim();
-        if (!code.matches("PXL00[1-6]")) {
+        if (!code.matches("PXL(?:00[1-9]|01[0-2])")) {
             FAILURES.add(casePath + "：expected.error 内容非法 " + code);
             return null;
         }

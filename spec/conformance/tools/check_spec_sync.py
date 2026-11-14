@@ -24,8 +24,16 @@ def manifest(path):
 
 
 def section_ids(path):
+    """Collect every normative section identifier a file mentions.
+
+    The number must be taken in full (`§5.0.1`, not the `§5.0` prefix), and a
+    `PRD Extension §x` mention is provenance for an out-of-repository document,
+    not a clause of this specification: counting it would force the English map
+    to invent entries for identifiers no clause in `spec/PXL.md` carries.
+    """
     text = path.read_text(encoding="utf-8")
-    return set(re.findall(r"(?:Core|Extension) §[0-9]+(?:\.[0-9]+)?|附录 [A-C]", text))
+    pattern = r"(?<!PRD )(?:Core|Extension) §[0-9]+(?:\.[0-9]+)*|附录 [A-C]"
+    return set(re.findall(pattern, text))
 
 def main():
     zh = manifest(ROOT / "spec" / "PXL.md")

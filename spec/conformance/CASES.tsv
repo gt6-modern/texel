@@ -1,7 +1,7 @@
 case	source	form	size	colors	encoding	covers	input
 syn-1x1-transparent	synthetic	single	1x1	0	char	全图只有一个透明像素;palette 长度 0;抽取必须产出单条 fill slot=0;§4.5 的 n 最小情形	committed
 syn-1x1-opaque	synthetic	single	1x1	1	char	单像素单色;palette 长度 1;token 宽度最小值;§5.1 fill 的最小编码	committed
-syn-16x16-mono	synthetic	single	16x16	1	char	整图纯色必须压缩成单条 fill(AGENTS.md §3.3);压缩版与逐像素版像素必须相同	committed
+syn-16x16-mono	synthetic	single	16x16	1	char	整图纯色必须压缩成单条 fill(`AGENTS.md` 契约 5);压缩版与逐像素版像素必须相同	committed
 syn-16x16-tricolor	synthetic	single	16x16	3	char	三阶调色板按行优先首次出现顺序分配(§4.4);RUNNER 块与 GRID 块混合时的 op 顺序(附录 A)	committed
 syn-17x13-odd	synthetic	single	17x13	4	char	宽高皆为奇数、非 2 的幂;rect 越界裁剪(§5.0);行数非偶数时 GRID 块切分	committed
 syn-64x32-nonsquare	synthetic	single	64x32	8	char	非方形且宽大于高;rect 跨行垂直合并(附录 A 第 5 步);grid 行长 64	committed
@@ -21,14 +21,14 @@ syn-png-two-text-chunks	synthetic	single	16x16	2	char	色彩类型 6 + 两条关
 real-copper-billet	real	single	16x16	7	char	char 档真实素材;含 8 个 RGB 非零且 A=0 的边界像素 -> 钉 §7 与 §5.0	committed
 real-chain-overlay-dedupe	real	batch	16x16	1	char	去重:copper/chain_overlay.png 与 wood/chain_overlay.png 字节相同(SHA-256 前缀 9a8136434004ec3a,同组 40 条路径);同图多路径必须产出同一份 expected.pxl;批量形态见 §13.7(manifest + 每成员一目录 + `## aggregate`)	committed
 real-void-uniform-alpha0	real	single	16x16	1	char	全图 256 个像素均为 FFFFFF00。palette 必须长度 1 而非 0;回渲必须逐字节得到全 FFFFFF00 而非全 00000000 -> 钉 §6.3 的 aNum==0 分支与 §7。同一像素集的 void.png 与 chain_overlay.png 字节不同:钉 §10 只比像素	committed
-real-brick-blockdust	real	single	16x16	36	char	真实低色数素材:检验 rect 压缩不破坏像素(AGENTS.md §3.3)。注:实测 36 色且 256/256 全不透明,非 AGENTS.md 所写近单色	committed
+real-brick-blockdust	real	single	16x16	36	char	真实低色数素材:检验 rect 压缩不破坏像素(`AGENTS.md` 契约 5)。注:实测 36 色且 256/256 全不透明,不是"近单色"	committed
 real-autoclave-front	real	single	16x16	147	index	中高色数真实素材落入 index 档(62 到 255);2 位大写十六进制 token;实测 147 色,256 个像素中 0 个 00000000、120 个 RGB 非零且 A=0、其余 136 个不透明。早前误记 186 色 / 188 个不可见像素,已按实测更正	committed
-real-dragonbreath	real	single	16x512	335	index4	n=335 强制 index4;真实帧带;AGENTS.md 写 336 色 = 335 + 透明 slot,用于核对 slot 计数口径	committed
+real-dragonbreath	real	single	16x512	335	index4	n=335 强制 index4;真实帧带;336 色 = 335 + 透明 slot(实测,见 spec/PXL.md 附录 C),用于核对 slot 计数口径	committed
 negative/neg-real-aerotheum-iccp-crc	real	single	-	-	-	PXL006(抽取侧):真实素材 aerotheum.png 的 iCCP chunk CRC 损坏(存储 96CEE38A,应为 927D9969),其余 chunk 全部正确、像素完好;§8.5 要求每个 chunk 的 CRC 都校验,故必须拒绝且不产出任何文件。该文件同时是 real-fluid-source-255 的 10 个已知缺陷成员之一(§13.7),本条是它的单例负例。iCCP+zTXt 的解码兼容性覆盖改由修复副本或合成用例承担(待 real- 落地)。注:实测 68 色(计透明 slot 为 69)→ index,非旧写的 5906 色	committed
 real-oil	real	single	16x512	11	char	无 iCCP 的对照样本;同样带 bKGD/pHYs/tIME,必须照样丢弃 ancillary 而像素不变	committed
 real-armor-hazard-0	real	single	64x32	14	char	64x32 非方形真实素材;1694 个 alpha=0 像素中大量 RGB 非零 -> 再钉 §7	committed
 real-fluid-source-255	real	batch	16x(16..512)	varying	char..index4	解码器回归:255 个 .png 中 245 个是往返正例,另 10 个因 iCCP chunk CRC 损坏(其余 chunk 全对、像素完好)按 §8.5 必须是 PXL006,登记为 §13.7 的「已知缺陷成员」;实测全部深度 8、非交错、色彩类型仅 6 与 2;批量形态见 §13.7,聚合判据为 245 + 10 = 255	committed
-real-item-material-family-400	real	batch	16x16	varying	char..index4	吞吐与去重统计:总文件数 8610,取前 400(AGENTS.md §7 第 10 行);实测 164 个同大小桶、最大同组 3045 个字节相同文件;批量形态见 §13.7(manifest + 每成员一目录 + `## aggregate`)	committed
+real-item-material-family-400	real	batch	16x16	varying	char..index4	吞吐与去重统计:总文件数 8610,取前 400(素材实测明细见 spec/PXL.md 附录 C);实测 164 个同大小桶、最大同组 3045 个字节相同文件;批量形态见 §13.7(manifest + 每成员一目录 + `## aggregate`)	committed
 op-pixel	synthetic	single	16x16	2	char	pixel 单独成 op:单点写入、同一格被后继 pixel 覆盖、越界 pixel 为空操作(§5.3 与 §5.0)。此前漏了这条,八条图元里 pixel 无判定	committed
 op-line-bresenham	synthetic	single	16x16	2	char	line 八分圆:8 个方向各一条含两端点的线;钉附录规定的 Bresenham 逐像素集合,含 x0==x1、y0==y1 与单像素退化;并钉 line 不做反转对称归一(§5.4)	committed
 op-mirror-overlap	synthetic	single	16x16	2	char	mirror 快照语义:from 与 to 重叠、flipX 与 flipY 各一例;验证结果不依赖写入顺序;并钉 from 越界时源按透明 slot 0 参与(§5.6)	committed
@@ -150,7 +150,10 @@ negative/neg-numeric-slot-out-of-palette	synthetic	single	-	-	-	PXL005(渲染侧
 negative/neg-priority-001-over-003-codepoint-length	synthetic	single	-	-	-	PXL001(渲染侧):`encoding` 未知(阶段 4 会报 PXL003),同时 grid 为 `["\uD83D\uDE00", "00"]`。按**码点**计长度为 1 与 2,不等长属阶段 3,必须先报 PXL001;若按 UTF-16 代码单元计是 2 与 2,就会滑到阶段 4 报 PXL003。钉住 §3.4 的计数单位	committed
 op-lenient-bom-crlf	synthetic	single	2x2	2	char	仅渲染正例:`input.pxl` 带 UTF-8 BOM、所有换行为 CRLF、结尾无换行符。§3.8 要求渲染器接受这三点;一个只吃"无 BOM + LF + 有结尾换行"的实现必须在此失败	committed
 op-lenient-structure	synthetic	single	2x2	2	char	仅渲染正例:成员顺序打乱;缩进分别用 4 空格、**2 个 tab**、空格与 tab 混用;**至少两行带行尾空白**(空格与 tab 各一);冒号后多个空格;`flipX` 显式写成 `false`;`width` / `height` 写成 `2.0`。§3.8 要求"任意缩进、任意行尾空白"全部接受——只接受 4 空格缩进、拒绝 tab 与行尾空格的解析器必须在此失败	committed
-negative/neg-version-out-of-long-range	synthetic	single	-	-	-	PXL001(渲染侧): version 写成 2^63 —— 词法是整数但超出 64 位可表示范围;只用「整数值 == 0」判定会把无法表示的值读成 0 从而误接受。钉 §12 的 fail-closed 与 §3.8 的精确词法判定	committed
+negative/neg-version-out-of-long-range	synthetic	single	-	-	-	PXL001(渲染侧): version 写成 2^63 —— 词法是整数但超出 64 位可表示范围,属"不可表示";钉 §12 的 fail-closed、§3.8 的精确词法判定,以及 PXL001(不可表示)与 PXL007(域内不支持)的分界	committed
+negative/neg-version-unsupported	synthetic	single	-	-	-	PXL007(渲染侧): version = 2 —— 合法整数、落在分派域 0..65535 内但本 compiler 不支持该版本。不是 PXL001(非语法错)、不是 PXL002(非数值域),也不得猜一个相近版本继续渲染;钉版本分派先于一切字段校验	committed
+negative/neg-version-not-integer	synthetic	single	-	-	-	PXL001(渲染侧): version = 1.5 —— 类型是 number 但不是整数值;版本取精确词法值,不得按浮点取整,也不得交给 PXL002 的数值域检查(分派在数值域之前)	committed
+negative/neg-version-zero	synthetic	single	-	-	-	PXL007(渲染侧): version = 0 —— v0 是旧版本号,current 必须明确拒绝而不是按 v0 语义渲染;凡把 0 当默认值或缺省值的实现都在此失败	committed
 negative/neg-sprite-tokens-over-limit	synthetic	single	-	-	-	PXL002(渲染侧):一个 sprite 的单行有 65537 个 token,超过 65536 上界。§3.4 的 token 数上界适用于凡出现 token 行数组的地方(grid 字段与 sprites 的每个值),只查 grid 会与独立实现分叉	committed
 syn-png-gray-trns-highbyte	synthetic	single	16x16	2	char	色彩类型 0 + tRNS 但**高字节非 0**(`0180`):按 PNG 第三版 §11.3.2.1 必须**先按样本深度掩掉高位**再比较,于是样本 `0x80` 仍然命中、得到 `(128,128,128,0)`。早前规范写"按 16 位整值比较"(0x0180 ≠ 0x80、不命中),与 PNG 标准冲突,已更正	committed
 negative/neg-resource-raster-budget	synthetic	single	-	-	-	PXL002(渲染侧):2048×2048(面积恰好等于上界)+ 两条全画布 rect。面积、图层数、每层 ops 三个上限各自合法,但裁剪后的像素写入累计 8,388,608,超过 §5.0.2 的 2^22 光栅工作预算	committed

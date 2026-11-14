@@ -123,11 +123,18 @@ fp1=$(cat build/compiler-fingerprint.txt | grep compiler_sha256)
 out=$(run -PtxelTargets=targets.tsv)
 echo "$out" | grep -E "Task :texelCompile|UP-TO-DATE" | head -2
 JARDIR=$(ls -d "$HERE/../../compiler/java/cli/build/install/"*/lib)
-mv "$JARDIR/core.jar" "$FULLLOG.core.jar.keep"
+# 产物名带版本号（core-<VERSION>.jar，VERSION 来自仓库根的 VERSION 文件）。
+# 写死 core.jar 会让下面的 mv 静默失败，于是"改编译器内容"这一步根本没发生，
+# C 段就以"指纹没变"假红（2026-11-12 CI 实测）。
+CORE_JAR=$(ls "$JARDIR"/core-[0-9]*.jar 2>/dev/null | head -1)
+if [ -z "$CORE_JAR" ]; then
+    echo "C FAIL: 找不到 core jar（$JARDIR）"; fail=1
+fi
+mv "$CORE_JAR" "$FULLLOG.core.jar.keep"
 cp "$FULLLOG.core.jar.keep" "$JARDIR/core-copy.jar"
 out=$(run -PtxelTargets=targets.tsv)
 fp2=$(cat build/compiler-fingerprint.txt | grep compiler_sha256)
-rm -f "$JARDIR/core-copy.jar"; mv "$FULLLOG.core.jar.keep" "$JARDIR/core.jar"
+rm -f "$JARDIR/core-copy.jar"; mv "$FULLLOG.core.jar.keep" "$CORE_JAR"
 echo "fp1=$fp1"; echo "fp2=$fp2"
 if [ "$fp1" = "$fp2" ]; then echo "C FAIL: 编译器内容变了指纹却没变"; fail=1; else echo "C OK: 指纹随编译器内容变化"; fi
 if echo "$out" | grep -q "Task :texelCompile UP-TO-DATE"; then echo "C FAIL: 编译器变了仍 UP-TO-DATE"; fail=1; else echo "C OK: 编译器变了 texelCompile 重跑"; fi
@@ -140,7 +147,9 @@ if [ "$have_symlinks" = "1" ]; then
 echo "== H) 预检目录软链接到依赖目录：必须拒绝且依赖字节不变 =="
 rm -rf build/tmp/texel-preflight; mkdir -p build/tmp
 ln -s "$(pwd)/demo/parts" build/tmp/texel-preflight
-out=$(run)
+# 必须强制重跑：落点校验在 task action 里，而软链接不是声明的输入，
+# 任务 up-to-date 时整段校验根本不执行（见本脚本开头"必须清"那条注释的同一陷阱）。
+out=$(run --rerun-tasks)
 if echo "$out" | grep -q "落点不在 build"; then echo "H OK: 拒绝了"; else echo "H FAIL: 未拒绝"; echo "$out" | tail -6; fail=1; fi
 AFTER=$(sha256sum "$BLADE" | cut -d" " -f1)
 if [ "$BEFORE" = "$AFTER" ]; then echo "H OK: 依赖字节未变"; else echo "H FAIL: 依赖被改写"; fail=1; fi

@@ -5,6 +5,28 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+### Fixed
+- The normative text claimed `PXL001` for every non-zero `version` while the wire format has
+  been version 1 throughout. `spec/PXL.md` now states one rule in Core §3.2, §11 and §12:
+  an in-domain version the compiler does not support is `PXL007`, and only a missing,
+  non-integer, negative, out-of-domain or unrepresentable value is `PXL001`.
+- `version` is no longer described as a reserved field next to `variant`; `bindings` is
+  described as a compile-session input (Extension §6.3) rather than a document field.
+- The core scope statement no longer claims that PXL never enters a build pipeline.
+- Added conformance coverage for the version dispatch: `neg-version-zero` and
+  `neg-version-unsupported` (`PXL007`), `neg-version-not-integer` (`PXL001`) in the base
+  suite, and `neg-version-in-domain-unsupported` in the components suite. Generator and
+  reference oracles now reject in-domain versions with `PXL007` instead of `PXL001`.
+- `check_spec_sync.py` takes section numbers in full and ignores `PRD Extension §x`
+  provenance, and the English section map now lists exactly the identifiers the Chinese
+  text carries instead of seven identifiers that existed nowhere in the specification.
+- `ci.yml` runs `check_spec_sync.py` and `check_release_metadata.py`; both were required by
+  `AGENTS.md` but never executed by CI. README and CONTRIBUTING list the same gates as
+  `AGENTS.md`.
+- 45 stale `AGENTS.md §x.y` citations across the spec, tools, tests, Java sources and the
+  corpus pointed at a numbered section layout that no longer exists; they now cite the
+  seven contracts, and historical references are marked as such.
+
 ## [0.1.0] - 2026-11-12
 
 ### Added

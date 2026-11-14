@@ -112,7 +112,7 @@ public final class PxlCompiler {
 
         /** RGBA8 原始字节流（§13.4 口径）；每次调用返回同一数组的副本由调用方负责。 */
         public byte[] renderRgba() {
-            // 不泄漏内部数组（AGENTS.md §4.1）：此前返回的是同一份引用，
+            // 不泄漏内部数组：此前返回的是同一份引用，
             // 调用方改一个字节就篡改了编译产物（发布态复核旧账 F）。
             return rgba.clone();
         }

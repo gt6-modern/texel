@@ -453,7 +453,7 @@ def _single_clauses(case):
             "(§10 只比像素)。",
         "real-brick-blockdust":
             "`§4.4` / `§4.5`(实测 36 色、256/256 全不透明 → `char` 档)、"
-            "AGENTS.md §3.3 的 `rect` 压缩不破坏像素、附录 A 第 3–5 步。",
+            "`AGENTS.md` 契约 5 的 `rect` 压缩不破坏像素、附录 A 第 3–5 步。",
         "real-autoclave-front":
             "`§4.5`(实测 147 色 → `index` 档;62 ≤ n ≤ 255)、`§4.3`(两位大写十六进制 token)、"
             "`§3.5` / `§7`(256 个像素中 0 个 `00000000`、120 个 RGB 非零且 A = 0)。",

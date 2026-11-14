@@ -1,11 +1,12 @@
 package io.github.texel.core;
 
 /**
- * 规范 §11.2 的 v0 码空间：{@code PXL001}..{@code PXL006}。package-private：对外只用
+ * 规范的完整码空间：core 的 {@code PXL001}..{@code PXL006}（Core §11.2）加上 Extension 的
+ * {@code PXL007}..{@code PXL012}（Extension §11.1）。package-private：对外只用
  * {@link PxlFormatException#code()}。
  *
  * <p>**码域按规范定义，不按「本实现今天会产生的码」定义。** {@code PXL006} 是输入位图侧的码
- * （§8 / §11），今天只有 importer 会产出；core 仍必须把它当合法码——否则 PRD 阶段 3 把 PNG
+ * （Core §8 / §11），今天只有 importer 会产出；core 仍必须把它当合法码——否则 PRD 阶段 3 把 PNG
  * asset 解码接进 core 时，一个「忘了同步判定表」的改动就会让合法码在
  * {@link PxlFormatException} 构造处抛 {@link IllegalArgumentException}（RuntimeException，
  * 而 CLI 的批处理循环只捕受检异常、main 没有顶层 catch，于是**第一个命中就整批中止并甩一次栈**，

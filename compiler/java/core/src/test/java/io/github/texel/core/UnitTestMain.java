@@ -422,7 +422,8 @@ public final class UnitTestMain {
 
         run("codomain.v0-code-space", new Runnable() {
             public void run() {
-                // 码域按规范 §11.2 定义（PXL001..PXL006），不按"core 今天产生的码"定义：
+                // 码域按规范 Defined 集合：core 的 PXL001..PXL006（Core §11.2）加上
+                // Extension 的 PXL007..PXL012（Extension §11.1），不按"core 今天产生的码"定义：
                 // PXL006 是输入位图侧的码，core 不产生它，但必须把它当合法码接受。
                 for (String code : Codes.knownCodes()) {
                     PxlFormatException failure = new PxlFormatException(code, "x");

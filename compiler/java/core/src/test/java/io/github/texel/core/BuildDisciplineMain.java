@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * 构建纪律断言（AGENTS.md §4.1）。
+ * 构建纪律断言（`AGENTS.md` 契约 7：class major 52、生产代码只用 `java.base`）。
  *
  * <p>三条都必须由测试钉住，而不是靠"记得别这么写"：
  *

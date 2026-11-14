@@ -40,10 +40,13 @@ Importer 会在 PNG 旁生成自包含的 `version: 1` PXL。构建集成和 Jav
 
 ```console
 python spec/conformance/tools/gen_cases.py --all
+python spec/conformance/tools/check_spec_sync.py
+python tools/check_release_metadata.py
 python -m unittest discover -s tests
+python spec/conformance/tools/python_ref_verify.py
 python compiler/python/tools/conformance.py
 cd compiler/java
-./gradlew check -Ppython=python
+./gradlew --no-daemon clean check -Ppython=python
 ```
 
 完整门禁见 [CONTRIBUTING.zh-CN.md](CONTRIBUTING.zh-CN.md)。语言唯一裁决文本是 [`spec/PXL.md`](spec/PXL.md)；两个 compiler 只共享规范和 conformance 语料，不共享生产代码。

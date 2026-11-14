@@ -137,496 +137,591 @@ Unknown top-level fields, unknown operations, 16-bit channels, Adam7, color-mana
 
 ## Normative section map
 
-The Chinese specification above is the sole adjudicating text. The following map preserves every normative section identifier so implementations and tests can cite the same clauses in either language.
-### Core §1
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §1.1
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §1.2
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §2
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §3.1
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §3.2
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §3.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §3.4
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §3.5
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §3.6
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §3.7
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §3.8
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §4
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §4.1
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §4.2
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §4.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §4.4
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §4.5
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §4.6
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §5
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §5.0
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §5.0
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §5.0
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §5.1
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §5.2
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §5.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §5.4
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §5.5
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §5.6
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §5.7
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §5.8
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §6
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §6.1
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §6.2
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §6.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §6.4
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §6.5
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §6.6
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §6.7
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §7
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §8
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §8.1
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §8.2
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §8.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §8.4
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §8.5
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §9
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §10
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §11
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §11.1
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §11.2
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §12
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §13
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §13.1
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §13.2
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §13.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §13.4
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §13.5
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §13.6
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Core §13.7
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### 附录 A
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### 附录 B
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### 附录 C
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
+The Chinese specification in `spec/PXL.md` is the sole adjudicating text. This map lists
+every normative section identifier so a citation resolves to the same clause in either
+language; it carries no normative content of its own.
 
 ### Extension §3
 
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
-### Extension §3.1
+### Core §3
 
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
-### Extension §3.2
+### Core §1
 
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §3.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §4
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §4.1
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §4.2
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
 ### Extension §5
 
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §5.1
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §5.2
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §5.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §6
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §6.1
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §6.2
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §6.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §6.4
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §6.5
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §7
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §8
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §8.1
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §8.2
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §8.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §8.4
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §9
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §9.1
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §9.2
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §9.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
 ### Extension §9.4
 
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
-### Extension §10
+### 附录 C
 
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
-### Extension §10.1
+### Core §1.1
 
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
-### Extension §10.2
+### 附录 A
 
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
-### Extension §10.2
+### Core §1.2
 
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
-### Extension §10.3
+### Core §2
 
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
-### Extension §10.4
+### Core §3.1
 
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
-### Extension §11
+### Core §3.2
 
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §11.1
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §11.2
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §12
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §13
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §13.1
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §13.2
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §13.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §13.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §13.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §13.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §13.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §13.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §13.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §13.3
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §13.4
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §13.5
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
-
-### Extension §14
-
-See the identically numbered normative clause in spec/PXL.md; terminology, limits, formulas, examples, and error priorities are translated by reference and must not diverge.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
 ### Extension §2
 
-See the identically numbered normative clause in spec/PXL.md; this identifier is retained for bilingual citation parity.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
-### Extension §5.0
+### Extension §14
 
-See the identically numbered normative clause in spec/PXL.md; this identifier is retained for bilingual citation parity.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
-### Extension §10.5
+### Extension §6.3
 
-See the identically numbered normative clause in spec/PXL.md; this identifier is retained for bilingual citation parity.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
-### Extension §12.1
+### Core §3.3
 
-See the identically numbered normative clause in spec/PXL.md; this identifier is retained for bilingual citation parity.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
-### Extension §12.2
+### Core §3.4
 
-See the identically numbered normative clause in spec/PXL.md; this identifier is retained for bilingual citation parity.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
-### Extension §14.2
+### Core §3.5
 
-See the identically numbered normative clause in spec/PXL.md; this identifier is retained for bilingual citation parity.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
-### Extension §18.2
+### Core §3.6
 
-See the identically numbered normative clause in spec/PXL.md; this identifier is retained for bilingual citation parity.
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
 
+### Core §3.7
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §3.8
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §4
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §4.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §4.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §4.3
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §4.4
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §4.5
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §4.6
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §5
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §5.0
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §5.0.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §5.0.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §5.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §5.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §5.3
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §5.4
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §5.5
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §5.6
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §5.7
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §5.8
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §6
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §6.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §6.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §6.3
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §6.4
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §6.5
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §6.6
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §6.7
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §7
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §8
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §8.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §8.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §8.3
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §8.4
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §8.5
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §9
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §10
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §11
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §11.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §11.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §11.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §12
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §13
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §13.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §13.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §13.3
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §13.4
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §13.5
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §13.6
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Core §13.7
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### 附录 B
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §3.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §3.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §6
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §3.3
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §5.3
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §4
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §4.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §4.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §6.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §5.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §7
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §5.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §6.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §6.4
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §6.5
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §11.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §8
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §8.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §8.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §8.4
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §8.3
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §9
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §9.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §9.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §9.3
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §10
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §10.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §10.3
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §10.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §10.2.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §10.4
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §11
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §12
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §13
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §13.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §13.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §13.3
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §13.3.1
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §13.3.2
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §13.3.3
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §13.3.4
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §13.3.5
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §13.3.6
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §13.3.7
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §13.4
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.
+
+### Extension §13.5
+
+The identically numbered clause in `spec/PXL.md` is authoritative; this entry keeps a
+bilingual citation pointing at the same identifier.

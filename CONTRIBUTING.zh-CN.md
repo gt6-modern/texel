@@ -19,11 +19,13 @@
 
 ```console
 python spec/conformance/tools/gen_cases.py --all
+python spec/conformance/tools/check_spec_sync.py
+python tools/check_release_metadata.py
 python -m unittest discover -s tests
 python spec/conformance/tools/python_ref_verify.py
 python compiler/python/tools/conformance.py
 cd compiler/java
-./gradlew check -Ppython=python
+./gradlew --no-daemon clean check -Ppython=python
 ```
 
 PR 必须说明行为变化、链接规范条款与语料，必要时同步两个实现，并同步更新中英文公开文档。

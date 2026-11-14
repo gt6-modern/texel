@@ -16,7 +16,7 @@ docs/ 下是历史记录、参考实现说明与产品需求，可能引用尚�
 下一版本的规范文件）；spec/conformance/cases/ 下是 800 多份语料 notes，属索引驱动的另一类
 判据，正文里出现 Markdown 链接只是说明文字。两类都按目录排除，而不是逐文件列白名单。
 
-本文件刻意不依赖 3.11+ 才有的 TOML 解析器（AGENTS.md §4.2 要求 3.8+），只做纯文本断言。
+本文件刻意不依赖 3.11+ 才有的 TOML 解析器（`AGENTS.md` 契约 7 要求 3.8+），只做纯文本断言。
 """
 
 import re
@@ -43,7 +43,7 @@ class PackagingTest(unittest.TestCase):
     def test_metadata_minimum(self):
         self.assertRegex(self.text, r'(?m)^name = "texel-importer"$')
         self.assertRegex(self.text, r'(?m)^requires-python = ">=3\.8"$')
-        #: 零运行时依赖是硬约束（AGENTS.md §4.2）。
+        #: 零运行时依赖是硬约束（`AGENTS.md` 契约 7）。
         self.assertRegex(self.text, r'(?m)^dependencies = \[\]$')
 
     def test_declared_packages_exist(self):

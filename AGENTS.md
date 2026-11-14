@@ -22,6 +22,10 @@ Texel is an engine-independent PNG ⇄ PXL toolchain. The public release support
 6. PNG input is 8-bit and non-interlaced. Every chunk CRC is validated. Unsupported bit depth, Adam7, or malformed input is rejected explicitly.
 7. Java production code targets class major 52 and may use only `java.base`. Python production code supports 3.8+ and uses only the standard library. Add no runtime dependency.
 
+## Citation convention
+
+Other documents in this repository cite the seven contracts above as `contract N` in English and 「契约 N」 in Chinese (for example `AGENTS.md` contract 7 for the Java/Python runtime constraints). Do not reintroduce numbered sections: the numbered layout that older revisions used (§3.2, §4.1, …) no longer exists, so a bare `AGENTS.md §x.y` reference is stale by construction.
+
 ## Change workflow
 
 - Specification first: update the normative Chinese text and its English translation before behavior.

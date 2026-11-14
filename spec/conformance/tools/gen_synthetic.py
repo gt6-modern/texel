@@ -193,7 +193,7 @@ def case_16x16_mono():
         png_desc="色彩类型 2(RGB)、8 bit、非交错、行过滤器恒 0、每行 48 字节、无 tRNS",
         intent=intent, rows=_rows_ct2(intent, width, height),
         clauses="`§8.2` 第 3 行(色彩类型 2 → a = 255)、`§4.5`(n = 1)、"
-                "`§5.1`/附录 A 第 2 步(整图纯色 → 单条 `fill`)、AGENTS.md §3.3(必须压缩)。",
+                "`§5.1`/附录 A 第 2 步(整图纯色 → 单条 `fill`)、`AGENTS.md` 契约 5(必须压缩)。",
         derive="256 个像素全是 `336699` + a = 255;n = 1 → char 档;"
                "全图同 slot → `fill slot=1`,不得输出 256 条 `rect` 或一条 `grid`。",
     )

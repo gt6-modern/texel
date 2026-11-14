@@ -23,7 +23,7 @@ def extract_png(data, raw=False):
     """把一份 PNG 字节抽成规范形式 PXL 文本(末尾恰一个 LF)。
 
     ``raw=True`` 时不走附录 A 的压缩,输出整图一条 ``grid``(逐像素基准)。
-    两条路径的渲染结果必须逐像素相同——这是 AGENTS.md §3.3 的判定方式。
+    两条路径的渲染结果必须逐像素相同——这是 `AGENTS.md` 契约 5 的判定方式。
     """
     image = decode_png(data)
     rgba = to_rgba8(image)

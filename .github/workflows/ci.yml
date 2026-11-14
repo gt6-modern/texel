@@ -1,28 +1,41 @@
 name: ci
 
-# 两道门禁互不依赖。注意这里**不挂任何外部项目的 check**——本仓库不产出进入别人
-# 资源包的文件(AGENTS.md §4.3)。
+# 两道门禁互不依赖。注意这里**不挂任何外部项目的 check**——本仓库不接管别人项目的
+# 资源包门禁。
 #
 # 覆盖率分工(审查把它列为 P1 的"同一份语料跑五遍"):
-#   * JDK 21 那一个 job 跑**全量** 809 项 conformance + 37 组单测 + 19 组 CLI。
+#   * JDK 21 那一个 job 跑**全量** base 用例(当前 812 项) + 37 组单测 + 19 组 CLI。
 #   * JDK 8/11/17 只跑**代表性 smoke**:三档编码、三种 blend、几条 op、一个批量套件、
 #     一个抽取负例、一个渲染负例。它们要证的是"同一份 class major 52 在这些运行时上
-#     行为一致",不是把那 809 项再判四遍。
+#     行为一致",不是把那 812 项再判四遍。
 
 on:
   push:
-    branches: [main]
+    # master 是公开仓库的权威分支（单提交的清理版历史，发布在 v0.1.0 tag 上）。
+    # main 只是本地开发史的旧分支名，不在远端保留。
+    branches: [master]
   pull_request:
+
+# Windows runner 的控制台编码是 cp1252，而语料工具会打印中文与「→」；
+# 不强制 UTF-8 就会在 print 处 UnicodeEncodeError: 'charmap'（2026-11-12 实测）。
+env:
+  PYTHONUTF8: "1"
 
 jobs:
   python:
     name: Python ${{ matrix.python }} 抽取器 + 语料体检
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        # AGENTS.md §4.2 要求"CI 跑一次 3.8 解释器":3.8 是下限,3.12 跟当前版本。
-        python: ["3.8", "3.12"]
+        # AGENTS.md 契约 7 要求 Python 3.8+ 与零运行时依赖：3.8 是下限，3.12 跟当前版本。
+        # ubuntu-latest 已升到 26.04，工具缓存里没有 3.8（setup-python 直接失败），
+        # 所以 3.8 这一格钉在 22.04 上；3.12 跟 latest。
+        include:
+          - python: "3.8"
+            os: ubuntu-22.04
+          - python: "3.12"
+            os: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,6 +47,12 @@ jobs:
         run: |
           python spec/conformance/tools/gen_cases.py --check
           python spec/conformance/tools/gen_conformance_cases.py --check
+      # AGENTS.md 的 Required verification 里这两条此前没有接线,只能靠人记得手工跑;
+      # 中英规范分叉与版本号漂移都属于"改一处忘一处"的典型,交给 CI。
+      - name: 规范中英同步 + 发布元数据
+        run: |
+          python spec/conformance/tools/check_spec_sync.py
+          python tools/check_release_metadata.py
       - name: 单元测试(仅标准库,零第三方依赖)
         run: python -m unittest discover -s tests
       - name: 语料体检(独立渲染 oracle + 索引语义)
@@ -60,7 +79,7 @@ jobs:
           python-version: "3.12"
       - name: 生成型用例的输入
         run: python spec/conformance/tools/gen_cases.py --all
-      - name: gradlew check(全量 809 项 + discipline)
+      - name: gradlew check(全量 base 用例 + discipline)
         working-directory: compiler/java
         run: ./gradlew --no-daemon check -Ppython=python
       # 构建集成的增量门禁（改依赖失效 / 改无关文件不失效 / 缓存开关不改字节）。
@@ -87,7 +106,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 产物是 class major 52,8/11/17/21 都能直接跑(AGENTS.md §4.1 的目的)。
+        # 产物是 class major 52,8/11/17/21 都能直接跑(AGENTS.md 契约 7 的目的)。
         java: ["8", "11", "17", "21"]
     steps:
       - uses: actions/checkout@v4

@@ -58,10 +58,13 @@ A minimal PXL document:
 
 ```console
 python spec/conformance/tools/gen_cases.py --all
+python spec/conformance/tools/check_spec_sync.py
+python tools/check_release_metadata.py
 python -m unittest discover -s tests
+python spec/conformance/tools/python_ref_verify.py
 python compiler/python/tools/conformance.py
 cd compiler/java
-./gradlew check -Ppython=python
+./gradlew --no-daemon clean check -Ppython=python
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete cross-platform gates. The normative language definition is [spec/PXL.md](spec/PXL.md); the two compiler implementations align through that specification and the shared conformance corpus, not shared production code.

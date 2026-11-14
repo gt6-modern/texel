@@ -784,11 +784,11 @@ def blend_cases():
 
 
 # ==========================================================================
-# 二、negative/*(渲染侧 + 抽取侧,96 条)
+# 二、negative/*(渲染侧 + 抽取侧,99 条)
 # ==========================================================================
 
 def negative_cases():
-    """96 条负例:每个目录只放一个缺陷(`neg-priority-*` 例外,是阶段序用例)。"""
+    """99 条负例:每个目录只放一个缺陷(`neg-priority-*` 例外,是阶段序用例)。"""
 
     def simple(**kwargs):
         return serialize(
@@ -797,7 +797,7 @@ def negative_cases():
             kwargs.get("palette", ["FF0000FF"]),
             kwargs.get("layers", [layer(ops=[fill(1)])]),
             sprites=kwargs.get("sprites"),
-            version=kwargs.get("version", 0),
+            version=kwargs.get("version", 1),
             format_value=kwargs.get("format_value", "PXL"),
             top_extra=kwargs.get("top_extra"))
 
@@ -826,23 +826,54 @@ def negative_cases():
 
     negative_render(
         "negative/neg-unknown-field", "PXL001",
-        "`§3.2`(顶层出现该表之外的字段即 `PXL001`)、`§12`(`variant` / `bindings` "
-        "同为 fail-closed)、`§11.1` 阶段 3。",
+        "`§3.2`(顶层出现该表之外的字段即 `PXL001`)、`§12`(`variant` 为 reserved,"
+        "出现即 fail-closed;`bindings` 是调用期输入、不是文档字段)、`§11.1` 阶段 3。",
         "顶层多了一个 `\"extra\"` 成员。§3.2 把顶层成员集合钉死为 8 个字段,"
-        "多一个即 `PXL001`(阶段 3)——`variant` / `bindings` 这两个 reserved 字段"
-        "走的也是这条规则。",
+        "多一个即 `PXL001`(阶段 3)——`variant` 这个 reserved 字段走的是同一条规则;"
+        "`bindings` 属 Extension §6.3 的调用期输入,写成顶层成员同样按未定义字段拒绝。",
         simple(top_extra=[("extra", 1)]))
 
     negative_render(
         "negative/neg-version-out-of-long-range", "PXL001",
-        "`§12`(非法、非整数或越界的 `version` 一律 `PXL001`)、`§3.8`(按原始词法精确判定,"
-        "不经二进制浮点)、`§11.1` 阶段 3。",
+        "`§12`(缺失、非整数或不可表示的 `version` 报 `PXL001`;域内其它整数报 `PXL007`)、"
+        "`§3.8`(按原始词法精确判定,不经二进制浮点)、Version dispatch、`§11.1` 阶段 3。",
         "`version` 写成 2^63(`9223372036854775808`):词法是整数,但**超出 64 位可表示"
-        "范围**。实现若只依赖宿主整数转换,会把无法表示的值读成 0 从而**误接受**"
+        "范围**。实现若只依赖宿主整数转换,会把无法表示的值读成 1 从而**误接受**"
         "(解析层用一个「整数但不可表示」的哨兵时尤其容易);正确做法是先判能不能表示,"
-        "再判值。这条钉住 §12 的 fail-closed。",
+        "再判值。这条钉住 §12 的 fail-closed,也是 `PXL001` 与 `PXL007` 的分界:"
+        "越界属「不可表示」→ `PXL001`,域内但不支持的版本(如 `2`)→ `PXL007`。",
         serialize(1, 1, "char", ["FF0000FF"], [layer(ops=[])]).replace(
             '"version": 1', '"version": 9223372036854775808'))
+
+    negative_render(
+        "negative/neg-version-unsupported", "PXL007",
+        "`§12`(域内但不等于 1 的整数 `version` 报 `PXL007`)、Version dispatch 第 3 条、"
+        "`§3.8`(只看词法值,不做隐式迁移)、Extension §11.1。",
+        "`version` 写成 `2`:词法是整数、落在分派域 `0..65535` 之内,只是本 compiler "
+        "不支持该版本。正确结果是 `PXL007`,**不是** `PXL001`(那不是语法错),"
+        "**不是** `PXL002`(那不是数值域),更不允许实现「猜一个相近版本继续渲染」——"
+        "这条钉住版本分派先于一切字段校验。",
+        serialize(1, 1, "char", ["FF0000FF"], [layer(ops=[])], version=2))
+
+    negative_render(
+        "negative/neg-version-not-integer", "PXL001",
+        "`§12`(非整数的 `version` 报 `PXL001`)、Version dispatch 第 3 条、"
+        "`§3.8`(按原始词法精确判定)、`§11.1` 阶段 3。",
+        "`version` 写成 `1.5`:类型类别是 number,但不是整数值。`version` 取的是"
+        "**精确词法值**,实现不得先按二进制浮点读成 `1.5` 再「四舍五入取整」,"
+        "也不得把它当数值域问题交给 `PXL002`——版本分派在数值域检查之前,"
+        "无法表示为整数即 `PXL001`。",
+        serialize(1, 1, "char", ["FF0000FF"], [layer(ops=[])]).replace(
+            '"version": 1', '"version": 1.5'))
+
+    negative_render(
+        "negative/neg-version-zero", "PXL007",
+        "`§12`(域内但不等于 1 的整数 `version` 报 `PXL007`)、Version dispatch 第 4 条"
+        "(实现不得接受 version 0)、Extension §11.1。",
+        "`version` 写成 `0`:v0 曾是本文的旧版本号,current 实现必须**明确拒绝**而不是"
+        "按 v0 语义渲染。词法上它是合法整数且落在分派域内,故是 `PXL007`;"
+        "凡把「0」当作默认值或「缺省即 0」的实现都会在此失败。",
+        serialize(1, 1, "char", ["FF0000FF"], [layer(ops=[])], version=0))
 
     negative_render(
         "negative/neg-blend-invalid", "PXL001",

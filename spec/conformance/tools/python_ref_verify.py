@@ -397,9 +397,11 @@ def verify_negative(report, case, row):
                         "缺 expected.error 或 notes.md"):
         return
     code = error_file.read_bytes()
-    report.check(code in [(("PXL00%d" % index) + "\n").encode("ascii")
-                         for index in range(1, 7)], case,
-                 "expected.error 不是「PXL001..PXL006 + LF」: %r" % (code,))
+    # current 的错误码止于 `PXL012`(Extension §11.1):PXL001..PXL006 属 core,
+    # PXL007..PXL012 属 Extension。语料里两类都出现,故这里不能只放行前六码。
+    report.check(code in [(("PXL%03d" % index) + "\n").encode("ascii")
+                         for index in range(1, 13)], case,
+                 "expected.error 不是「PXL001..PXL012 + LF」: %r" % (code,))
     expected = code.decode("ascii").strip()
     side = "渲染侧" if has_pxl else "抽取侧"
     report.check(side in notes_file.read_text(encoding="utf-8"), case,

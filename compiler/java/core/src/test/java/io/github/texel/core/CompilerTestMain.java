@@ -429,7 +429,7 @@ public final class CompilerTestMain {
         });
         run("v1.compiled-rgba-is-a-copy", new Body() {
             public void run() throws Exception {
-                // 不泄漏内部数组（AGENTS.md §4.1）：拿到的字节流被改写，不能影响下一次读取。
+                // 不泄漏内部数组：拿到的字节流被改写，不能影响下一次读取。
                 PxlCompiler.Compiled compiled = new PxlCompiler.Compiled(1, 1,
                         new byte[] {1, 2, 3, 4},
                         new java.util.ArrayList<PxlCompiler.Dependency>());
