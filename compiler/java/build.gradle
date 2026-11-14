@@ -77,8 +77,13 @@ subprojects {
         }
     }
 
-    def signingKey = providers.gradleProperty('signingKey').orElse(
-            providers.environmentVariable('MAVEN_GPG_PRIVATE_KEY'))
+    // 环境变量在工作流里**总是存在**（未配置的 secret 会展开成空串），所以"存在"并不等于"配了密钥"。
+    // 只判 isPresent() 时，没配密钥也会被当成"必须签名"，于是 centralBundle 在签名任务上炸掉
+    // （Release run #3 实测：:cli:signMavenJavaPublication FAILED, Could not read PGP secret key）。
+    // 这里把空串/纯空白一律当作未配置：没密钥就构建**未签名**的 bundle（dry-run 可用；上传 Central 会被拒）。
+    def signingKey = providers.gradleProperty('signingKey')
+            .orElse(providers.environmentVariable('MAVEN_GPG_PRIVATE_KEY'))
+            .filter { value -> value != null && !value.trim().isEmpty() }
     def signingPassword = providers.gradleProperty('signingPassword').orElse(
             providers.environmentVariable('MAVEN_GPG_PASSPHRASE'))
     signing {
