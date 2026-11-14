@@ -231,7 +231,13 @@ final class PngReader {
                     throw fail("色彩类型 " + colorType + " 不得有 tRNS");
                 }
                 if (colorType == 3) {
-                    int entries = plte == null ? 0 : plte.length / 3;
+                    if (!sawPlte) {
+                        // PLTE 还没出现：此刻判"tRNS 长度是否超过 PLTE 项数"没有定义（项数为 0 只是
+                        // 兜底值，不是事实）。该报的是顺序错。上一版正是用 `plte == null ? 0` 兜底，
+                        // 于是同一个输入 importer 报顺序错、这里报长度错（2026-11-14 审查实测）。
+                        throw fail("tRNS 存在时 PLTE 必须更早");
+                    }
+                    int entries = plte.length / 3;
                     if (length > entries) {
                         throw fail("tRNS 长度超过 PLTE 项数");
                     }

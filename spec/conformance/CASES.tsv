@@ -157,3 +157,4 @@ negative/neg-version-zero	synthetic	single	-	-	-	PXL007(渲染侧): version = 0 
 negative/neg-sprite-tokens-over-limit	synthetic	single	-	-	-	PXL002(渲染侧):一个 sprite 的单行有 65537 个 token,超过 65536 上界。§3.4 的 token 数上界适用于凡出现 token 行数组的地方(grid 字段与 sprites 的每个值),只查 grid 会与独立实现分叉	committed
 syn-png-gray-trns-highbyte	synthetic	single	16x16	2	char	色彩类型 0 + tRNS 但**高字节非 0**(`0180`):按 PNG 第三版 §11.3.2.1 必须**先按样本深度掩掉高位**再比较,于是样本 `0x80` 仍然命中、得到 `(128,128,128,0)`。早前规范写"按 16 位整值比较"(0x0180 ≠ 0x80、不命中),与 PNG 标准冲突,已更正	committed
 negative/neg-resource-raster-budget	synthetic	single	-	-	-	PXL002(渲染侧):2048×2048(面积恰好等于上界)+ 两条全画布 rect。面积、图层数、每层 ops 三个上限各自合法,但裁剪后的像素写入累计 8,388,608,超过 §5.0.2 的 2^22 光栅工作预算	committed
+negative/neg-png-trns-length-over-plte	synthetic	single	-	-	-	PXL006(抽取侧):顺序合法(IHDR → PLTE → tRNS → IDAT → IEND),PLTE 仅 4 项而 tRNS 给 8 字节,只有长度这一条违规;与 trns-before-plte 成对,钉住「顺序错」与「长度错」不可互相替代	committed

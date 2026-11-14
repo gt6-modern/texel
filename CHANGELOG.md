@@ -12,6 +12,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
   38 PNG rejects that all share `PXL006`; `python_ref_verify` and the Java PNG gate both enforce it.
 
 ### Fixed
+- Core §8.5 now states that a value check depending on another chunk must first establish that the
+  chunk has appeared. Concretely: a palette image whose `tRNS` precedes `PLTE` is an ordering
+  rejection, not a "tRNS longer than PLTE entries" rejection. The Java decoder compared against a
+  fallback of zero entries and reported the length rule, while the importer reported the ordering
+  rule - same code, different first-failing rule. Java now checks ordering first, and a new
+  `neg-png-trns-length-over-plte` case keeps the length rule covered on its own.
 - The normative text claimed `PXL001` for every non-zero `version` while the wire format has
   been version 1 throughout. `spec/PXL.md` now states one rule in Core §3.2, §11 and §12:
   an in-domain version the compiler does not support is `PXL007`, and only a missing,

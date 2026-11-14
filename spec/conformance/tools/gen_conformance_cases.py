@@ -254,7 +254,8 @@ REJECT_DETAILS = {
     "neg-png-plte-forbidden-gray": ["色彩类型 0 不得有 PLTE"],
     "neg-png-size-over-limit": ["65536"],
     "neg-png-trns-bad-length": ["色彩类型 0 的 tRNS"],
-    "neg-png-trns-before-plte": ["tRNS 早于 PLTE", "tRNS 存在时 PLTE 必须更早", "tRNS 长度超过 PLTE 项数"],
+    "neg-png-trns-before-plte": ["tRNS 早于 PLTE", "tRNS 存在时 PLTE 必须更早"],
+    "neg-png-trns-length-over-plte": ["tRNS 长度"],
     "neg-png-trns-forbidden-rgba": ["色彩类型 6 不得有 tRNS"],
     "neg-png-unknown-critical": ["critical chunk"],
     "neg-png-zlib-adler": ["zlib 流非法", "zlib 数据非法"],
@@ -1795,6 +1796,20 @@ def extract_cases():
         _png([_ihdr(width, height, color_type=3),
               _chunk(b"tRNS", b"\x00\x80"),
               _chunk(b"PLTE", bytes(range(48))),
+              _chunk(b"IDAT", _zlib([bytes(x % 4 for x in range(width))] * height)),
+              _chunk(b"IEND", b"")]))
+
+    negative_extract(
+        "negative/neg-png-trns-length-over-plte", "PXL006",
+        "`§8.5`(色彩类型 3 的 `tRNS` 长度不得超过 `PLTE` 项数;依赖另一个 chunk 的上界检查"
+        "以该 chunk 已经出现为前提)。",
+        "顺序完全合法:`IHDR → PLTE → tRNS → IDAT → IEND`,`PLTE` 只有 4 项(12 字节),"
+        "`tRNS` 却给了 8 字节——**只有长度这一条**违规。它把「顺序错」与「长度错」分开钉住:"
+        "两者都报 PXL006,只有拒绝原因能把它们区分开;少了这一条,把顺序错的用例改成长度错"
+        "也不会有任何门禁变红。",
+        _png([_ihdr(width, height, color_type=3),
+              _chunk(b"PLTE", bytes(range(12))),
+              _chunk(b"tRNS", bytes(range(8))),
               _chunk(b"IDAT", _zlib([bytes(x % 4 for x in range(width))] * height)),
               _chunk(b"IEND", b"")]))
 

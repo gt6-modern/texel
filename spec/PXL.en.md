@@ -67,6 +67,8 @@ Blend modes are `normal`, `multiply`, and `mask`. Every channel calculation, alp
 
 PNG decoding validates the signature, every chunk length and CRC, chunk ordering, critical-chunk set, zlib stream, Adler checksum, filter bytes, exact inflated length, color-type rules, palette indices, and `tRNS` length. Supported input is non-interlaced 8-bit PNG in the color types enumerated by the conformance corpus. 16-bit, sub-8-bit, Adam7, malformed, unknown-critical, and over-budget input is rejected as `PXL006`; no silent conversion is allowed. Unknown ancillary chunks are ignored only after their CRC is validated.
 
+A value check that depends on another chunk must first establish that the chunk has appeared. For a palette image, a `tRNS` that precedes `PLTE` is an ordering violation and must be reported as such; it must not be reported as "tRNS longer than PLTE entries", because with `PLTE` absent that comparison is undefined. The same holds for every upper bound sourced from another chunk.
+
 ## Core §6 Deterministic PNG output and pixel equivalence
 
 Equivalence means identical width, height, and row-major RGBA8 bytes. PNG file bytes need not match an imported file because ancillary chunks and deflate representation are not semantic pixels. Compiler output is deterministic: fixed chunk order, fixed filtering and compression parameters, no clock, randomness, locale, filesystem iteration order, or process-specific data.
