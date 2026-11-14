@@ -32,10 +32,6 @@ class PxlError(Exception):
         #: v1 §9.3:入口 -> ... -> 实际失败文件的逻辑路径链。v0 场景下为空。
         self.chain = list(chain) if chain else []
 
-    def with_chain(self, logical_path):
-        """在被引用文档的失败上追加一段引用链(v1 §9.3「原样传播,只加引用链」)。"""
-        return PxlError(self.code, self.message, [logical_path] + self.chain)
-
     def describe(self):
         text = self.code + ": " + self.message
         if self.chain:
@@ -45,8 +41,3 @@ class PxlError(Exception):
 
 def fail(code, message):
     raise PxlError(code, message)
-
-
-def require(condition, code, message):
-    if not condition:
-        raise PxlError(code, message)

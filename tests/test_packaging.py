@@ -148,6 +148,7 @@ class CodeDomainTest(unittest.TestCase):
 
     JAVA = "compiler/java/core/src/main/java/io/github/texel/core/Codes.java"
     PYTHON = "importer/errors.py"
+    PY_CODES = "compiler/python/texel_compiler/errors.py"
 
     @staticmethod
     def extract(text, pattern):
@@ -163,6 +164,24 @@ class CodeDomainTest(unittest.TestCase):
                          "两侧错误码域不一致（Java Codes.ALL vs Python ALL_CODES）")
         self.assertEqual(["PXL001", "PXL002", "PXL003", "PXL004", "PXL005", "PXL006"],
                          sorted(java), "码域应与规范 §11.2 一致")
+
+    def test_v1_code_space_matches_across_implementations(self):
+        """v1 追加的 PXL007..PXL012 也必须两侧一致。
+
+        上面那条只比 v0 的 6 个码（`Codes.ALL` vs `importer/errors.py`），
+        而 PXL007..PXL012 一直没有任何跨实现门禁：任一侧加码漏另一侧，
+        `PxlFormatException` / `PxlError` 会在构造期直接抛异常（Codes 的 javadoc 写了后果）。
+        """
+        java_v0 = self.extract(read(self.JAVA), r"static final String\[\] ALL = \{[^}]*\}")
+        java_v1 = self.extract(read(self.JAVA), r"V1_EXTRA\s*=\s*\{[^}]*\}")
+        py_all = set(re.findall(r"PXL\d{3}", read(self.PY_CODES)))
+        self.assertEqual(
+            ["PXL007", "PXL008", "PXL009", "PXL010", "PXL011", "PXL012"],
+            sorted(java_v1), "Java Codes.V1_EXTRA 应与 Extension §11.1 的 6 个码一致")
+        self.assertEqual(sorted(java_v0 | java_v1), sorted(py_all),
+                         "两侧完整码空间不一致（Java ALL∪V1_EXTRA vs Python CODES）")
+        self.assertEqual(["PXL%03d" % number for number in range(1, 13)], sorted(py_all),
+                         "完整码空间应恰好是 PXL001..PXL012")
 
 
 class IgnoreHygieneTest(unittest.TestCase):

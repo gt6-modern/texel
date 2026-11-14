@@ -40,6 +40,11 @@ public final class BuildDisciplineMain {
         "Path.of(", ".isBlank()", ".strip()", ".repeat(", "Optional.isEmpty",
         "InputStream.readAllBytes", "transferTo(",
         "javax.imageio", "java.awt", "java.desktop",
+        // 反射加载既躲得过编译期引用检查，也躲得过 jdeps（jdeps 只读常量池，读不到字符串里的类名）：
+        // 把类名写进字符串就能在运行期拿到 java.desktop 的类。常见写法一并禁掉，
+        // 让「只用 java.base」成为可执行断言而不只是约定（2026-11-14 审查的 P1）。
+        "Class.forName", "ServiceLoader", "setAccessible",
+        "getDeclaredMethod", "getDeclaredField", "java.lang.reflect",
     };
 
     /**

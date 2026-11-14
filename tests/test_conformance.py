@@ -979,11 +979,6 @@ class RoundTripTest(unittest.TestCase):
                 first = extract_png(payload)
                 second = extract_png(payload)
                 self.assertEqual(first, second, "%s 两跑不一致" % case)
-                self.assertEqual(
-                    first,
-                    extract_png(bytes(payload)),
-                    "%s 复用字节对象时结果不同" % case,
-                )
 
 
 class IndependentExtractorTest(unittest.TestCase):
@@ -1154,10 +1149,12 @@ class AncillaryChunkTest(unittest.TestCase):
     ANCILLARY_SAMPLES = ("real-oil", "syn-16x16-tricolor")
 
     def test_stripping_all_ancillary_keeps_extraction_identical(self):
+        checked = 0
         for case in self.ANCILLARY_SAMPLES:
             source = CASES_DIR / case / "input.png"
             if not source.is_file():
                 continue
+            checked += 1
             with self.subTest(case=case):
                 payload = source.read_bytes()
                 stripped = _join_chunks(
@@ -1172,6 +1169,8 @@ class AncillaryChunkTest(unittest.TestCase):
                     extract_png(stripped),
                     "%s:剔除 ancillary 后抽取结果变了" % case,
                 )
+        # 空集合守卫：样本全缺时循环体一次都不执行，判据会静默消失。
+        self.assertGreater(checked, 0, "一条 ancillary 样本都没找到")
 
     def test_garbage_ancillary_payload_is_ignored(self):
         # CRC 正确但内容不是合法 deflate 的 zTXt:§8.5 要求忽略内容,不得试图解析。

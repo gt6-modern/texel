@@ -14,11 +14,11 @@ PNG_INPUT_PROFILE = "pxl-png"
 
 _TEXT = (
     "{\n"
-    '  "capabilities_version": 1,\n'
+    '  "capabilities_version": ' + str(CAPABILITIES_VERSION) + ',\n'
     '  "compiler_id": "' + COMPILER_ID + '",\n'
     '  "compiler_version": "' + COMPILER_VERSION + '",\n'
     '  "conformance_profile": "' + CONFORMANCE_PROFILE + '",\n'
-    '  "language_versions": [1],\n'
+    '  "language_versions": [' + ", ".join(str(v) for v in LANGUAGE_VERSIONS) + '],\n'
     '  "error_code_ranges": {\n'
     '    "1": {"min": "PXL001", "max": "PXL012"}\n'
     "  },\n"

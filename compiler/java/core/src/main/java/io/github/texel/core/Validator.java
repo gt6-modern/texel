@@ -820,8 +820,8 @@ final class Validator {
 
     // ---------------------------------------------------------------- v1：asset
 
-    /** 每文档 asset 声明数上限（规范 §10.1）。 */
-    static final int MAX_ASSETS = 4096;
+    // 每文档 asset 声明数上限（规范 §10.1）只有一处定义：Params.MAX_ASSET_DECLARATIONS。
+    // 这里不再保留第二份副本——两份同名常量里只要有一份没被引用，改另一份时就会静默分叉。
 
     private static final java.util.regex.Pattern ASSET_NAME =
             java.util.regex.Pattern.compile("[a-z][a-z0-9_]{0,63}");
@@ -970,21 +970,27 @@ final class Validator {
         return 4;
     }
 
+    // 档位容量只在这里定义一次（Core §4.1）。派档位与判 slot 上限都必须读它们：
+    // 两处各写一遍字面量时，改一处就会出现"阶段 7 判 PXL003、阶段 9 却放行"的自相矛盾。
+    static final int TIER_CHAR = 61;
+    static final int TIER_INDEX = 255;
+    static final int TIER_INDEX4 = 65535;
+
     static int tierCapacity(String encoding) {
         if ("char".equals(encoding)) {
-            return 61;
+            return TIER_CHAR;
         }
         if ("index".equals(encoding)) {
-            return 255;
+            return TIER_INDEX;
         }
-        return 65535;
+        return TIER_INDEX4;
     }
 
     static String deriveEncoding(int paletteSize) {
-        if (paletteSize <= 61) {
+        if (paletteSize <= TIER_CHAR) {
             return "char";
         }
-        if (paletteSize <= 255) {
+        if (paletteSize <= TIER_INDEX) {
             return "index";
         }
         return "index4";

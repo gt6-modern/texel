@@ -37,6 +37,14 @@ public final class ConformanceMain {
         "case", "source", "form", "size", "colors", "encoding", "covers", "input",
     };
 
+    /**
+     * 负例 `expected.error` 的合法码域：`PXL001..PXL012`（Core §11.2 + Extension §11.1）。
+     *
+     * <p>同一份码域在本文件里被两处断言用到（covers 前缀、expected.error 内容），
+     * 手抄两遍时改一处就会让两条断言互相矛盾——所以只留这一份。
+     */
+    private static final String CODE_PATTERN = "PXL(?:00[1-9]|01[0-2])";
+
     private static Path repo;
     private static Path casesDir;
     private static String python;
@@ -444,7 +452,7 @@ public final class ConformanceMain {
             if (casePath.startsWith("negative/")) {
                 // current 的错误码止于 PXL012（Extension §11.1）：PXL001..PXL006 属 core，
                 // PXL007..PXL012 属 Extension，负例行两类都出现。
-                if (!row.get("covers").matches("^PXL(?:00[1-9]|01[0-2])\\((渲染侧|抽取侧)\\):.*")) {
+                if (!row.get("covers").matches("^" + CODE_PATTERN + "\\((渲染侧|抽取侧)\\):.*")) {
                     FAILURES.add(casePath + "：负例 covers 必须以 PXL00N(侧): 开头");
                 }
                 // §13.3：负例没有 expected.pxl，`size` / `colors` 在那里是**无法校验的
@@ -1344,7 +1352,7 @@ public final class ConformanceMain {
             return null;
         }
         String code = readFully(file).trim();
-        if (!code.matches("PXL(?:00[1-9]|01[0-2])")) {
+        if (!code.matches(CODE_PATTERN)) {
             FAILURES.add(casePath + "：expected.error 内容非法 " + code);
             return null;
         }

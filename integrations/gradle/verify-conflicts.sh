@@ -75,7 +75,7 @@ printf "demo\tentry.pxl\tbuild/textures/demo.png\t-\nbad\tparts/blade.pxl\tdemo/
 out=$(run -PtxelTargets=targets.tsv)
 echo "$out" | grep -E "BUILD|覆盖" | head -3
 if echo "$out" | grep -q "BUILD SUCCESSFUL"; then echo "A FAIL: 冲突配置竟然成功"; fail=1; fi
-if echo "$out" | grep -q "覆盖了"; then echo "A OK: 报出了覆盖关系"; else echo "A WARN: 没看到覆盖提示"; fi
+if echo "$out" | grep -q "覆盖了"; then echo "A OK: 报出了覆盖关系"; else echo "A FAIL: 没看到覆盖提示（可能根本没跑到冲突检查）"; fail=1; fi
 if ! cmp -s demo/entry.pxl "$FULLLOG.entry.bak"; then echo "A FAIL: 入口被改写"; fail=1; else echo "A OK: 入口字节未变"; fi
 
 echo "== B) 两个 target 输出同一路径：必须失败 =="
@@ -83,7 +83,7 @@ printf "demo\tentry.pxl\tbuild/textures/same.png\t-\ndemo2\tentry.pxl\tbuild/tex
 out=$(run -PtxelTargets=targets.tsv)
 echo "$out" | grep -E "BUILD|同一路径" | head -3
 if echo "$out" | grep -q "BUILD SUCCESSFUL"; then echo "B FAIL: 重复输出竟然成功"; fail=1; fi
-if echo "$out" | grep -q "写到同一文件"; then echo "B OK: 报出了重复输出"; else echo "B WARN: 没看到重复输出提示"; fi
+if echo "$out" | grep -q "写到同一文件"; then echo "B OK: 报出了重复输出"; else echo "B FAIL: 没看到重复输出提示（可能根本没跑到冲突检查）"; fail=1; fi
 
 echo "== C) 编译器内容变化必须让指纹失效 =="
 echo "== F) 一个 target 的输出撞另一个 target 的**依赖**：必须在写之前失败且依赖不变 =="
@@ -115,7 +115,7 @@ echo "== D) 两个 target 重名：必须失败（否则共用清单，增量判
 printf "demo\tentry.pxl\tbuild/textures/demo.png\t-\ndemo\tparts/blade.pxl\tbuild/textures/other.png\t-\n" > targets.tsv
 out=$(run -PtxelTargets=targets.tsv)
 if echo "$out" | grep -q "BUILD SUCCESSFUL"; then echo "D FAIL: 重名竟然成功"; fail=1; else echo "D OK: 重名被拒"; fi
-if echo "$out" | grep -q "target 名重复"; then echo "D OK: 报出了重名"; else echo "D WARN: 没看到重名提示"; fi
+if echo "$out" | grep -q "target 名重复"; then echo "D OK: 报出了重名"; else echo "D FAIL: 没看到重名提示（可能根本没跑到配置期检查）"; fail=1; fi
 
 cp "$FULLLOG.targets.bak" targets.tsv
 run -PtxelTargets=targets.tsv > /dev/null

@@ -52,9 +52,6 @@ final class LogicalPath {
             if (segment.length() > MAX_SEGMENT) {
                 throw escape("路径段超过 " + MAX_SEGMENT + " 字节: " + segment);
             }
-            if ("".equals(segment)) {
-                continue;
-            }
             if ((".").equals(segment)) {
                 throw escape("逻辑路径不得出现 . 段: " + text);
             }

@@ -55,32 +55,19 @@ def writeAtomically = { File target, String text ->
     def temp = File.createTempFile('.texel-atomic-', '.tmp', parent)
     try {
         temp.setText(text, 'UTF-8')
+        // 必须 ATOMIC_MOVE：非原子 move 会退化成 copy+delete，对硬链接/符号链接目标
+        // 就是"截断并重写源文件"。主程序的 atomicMove 也是这个立场（拒绝非原子）。
         java.nio.file.Files.move(temp.toPath(), target.toPath(),
-                java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+    } catch (java.nio.file.AtomicMoveNotSupportedException unsupported) {
+        temp.delete()
+        throw new GradleException('文件系统不支持原子替换，拒绝写入 ' + target
+                + '（非原子 move 会改写硬链接源的 inode）')
     } catch (Exception failure) {
         temp.delete()
         throw failure
     }
-}
-
-/** 上一次运行留下的清单里列出的文件；没有清单时退化为整个 asset root。 */
-def manifestInputs() {
-    def collected = files()
-    boolean any = false
-    targets.each { target ->
-        def manifest = new File(depsDir, target.name + '.deps.tsv')
-        if (manifest.exists()) {
-            any = true
-            collected += files(manifest)
-            manifest.eachLine { line ->
-                if (line.trim()) {
-                    def path = line.split('\t', -1)[2]
-                    collected += files(new File(assetRoot, path))
-                }
-            }
-        }
-    }
-    return any ? collected : files(assetRoot)
 }
 
 /** 当前 JVM 的 java 可执行文件：集成层不假设 PATH 里有 java（Gradle 自己也可能跑在别的 JDK 上）。 */
@@ -157,7 +144,12 @@ def dependencyState() {
                 // （发布态复核：Windows 改大小写后 CLI 报 PXL008 而 Gradle 仍 UP-TO-DATE）。
                 out.append(source.exists() ? source.canonicalPath : 'GONE').append(' ')
                 if (source.isFile()) {
-                    out.append(source.bytes.encodeHex().toString())
+                    // 只写摘要：整份 hex 在大素材上会把 state 文件撑到几十 MB，而判据只需要
+                    // "变了没有"。（本函数开头那条关于 state 体积的注释说的就是这一点，
+                    // 上一版这里却写了 source.bytes.encodeHex()——自相矛盾，2026-11-14 审查 P2。）
+                    def sourceDigest = java.security.MessageDigest.getInstance('SHA-256')
+                    sourceDigest.update(source.bytes)
+                    out.append(sourceDigest.digest().encodeHex().toString())
                 } else {
                     out.append('GONE')
                 }
@@ -171,6 +163,15 @@ def dependencyState() {
 tasks.register('texelCompile') {
     group = 'texel'
     description = '把 targets.tsv 里的每个 target 编译成一个 PNG（单 target 调用，调用方循环）'
+
+    // 产物声明为 outputs：Gradle 至少知道本任务写哪些文件（clean / 诊断 / 增量报告需要）。
+    outputs.files(provider { targets.collect { file(it.out) } })
+    // **显式关闭构建缓存**。本任务的输入之一是上一次运行写出的依赖清单，而 Gradle 不允许
+    // "产物当输入"；因此缓存键覆盖不到真实输入，一旦允许缓存，改了依赖内容却命中旧条目
+    // 就会写出陈旧 PNG。up-to-date 判据由下面的 upToDateWhen 全权负责（见 :109-116 的说明）。
+    // 这条是显式选择而非遗漏：verify-incremental.sh 的"缓存开关不改变字节"因此是
+    // "缓存关掉后两者必然相同"，而不是在验证缓存本身。
+    outputs.cacheIf { false }
 
     outputs.upToDateWhen {
         // 判据 = 目标 + 编译器指纹 + 每个依赖的内容 + **每个产物的内容**。
@@ -296,7 +297,6 @@ tasks.register('texelCompile') {
         // 硬链接的路径仍落在 build 内，只有 isSameFile 才能识别（发布态复核 P1）。
         def sourceList = new File(preflightDir, 'sources.txt')
         def sourceText = new StringBuilder()
-        writeSet.keySet().each { }
         readSet.each { key, logical ->
             try {
                 sourceText.append(realOf(new File(key)).toString()).append('\n')
@@ -407,6 +407,24 @@ tasks.register('compilerFingerprint') {
         if (!realOut.startsWith(buildRealFp)) {
             throw new GradleException('编译器指纹文件 的实际落点不在 build 目录内: '
                     + output + ' -> ' + realOut)
+        }
+        // 硬链接身份判据：路径仍落在 build 内，只有 isSameFile 认得"这个文件其实是某个源"。
+        // 与 texelCompile 的 requireNotSource 同一条规则（发布态复核 P1）；
+        // 上一版这里只校验了落点，K 段能过完全靠 rename 替换目录项。
+        def sourcesFile = new File(buildDir, 'tmp/texel-preflight/sources.txt')
+        if (sourcesFile.isFile()) {
+            sourcesFile.eachLine { line ->
+                def text = line.trim()
+                if (!text) {
+                    return
+                }
+                def source = new File(text)
+                if (source.exists() && java.nio.file.Files.exists(realOut)
+                        && java.nio.file.Files.isSameFile(source.toPath(), realOut)) {
+                    throw new GradleException('编译器指纹文件 与源文件是同一个文件（硬链接）: '
+                            + output)
+                }
+            }
         }
         output.parentFile.mkdirs()
         def probe = new ByteArrayOutputStream()

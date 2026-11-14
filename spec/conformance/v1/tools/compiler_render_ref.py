@@ -30,14 +30,6 @@ VERSION_MAX = 65535
 #: 注意:能力档案 -> 语料组的映射**不在**这里,那是 profiles.tsv 的事(§13.2)。
 SUPPORTED_VERSIONS = (1,)
 
-#: 阶段 2 / 3 / 4 的落地范围。version 1 的 NotImplementedError 里会原样带出这张表,
-#: 使“还没实现”与“实现错了”一眼可分。
-V1_ROADMAP = (
-    ("阶段 2", "current version gate、AssetResolver、逻辑路径、PXL 依赖图、循环检测、依赖清单、全局预算"),
-    ("阶段 3", "PNG asset 解码与 stamp、PXL/PNG 混合依赖、永久 PNG 双路径门禁"),
-    ("阶段 4", "参数声明与参引替换、bindings、单 target CLI、完整 v1 compiler"),
-)
-
 
 def _fail(code, message):
     """按码失败。错误类型直接复用 base oracle 的 PxlRefError,避免出现第二个异常层次。"""

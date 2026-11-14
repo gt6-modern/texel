@@ -34,7 +34,6 @@ MAX_SPRITE_ROWS = 65536
 MAX_DOCUMENT_BYTES = 64 * 1024 * 1024
 MAX_RASTER_WORK = 1 << 22
 MAX_ROW_TOKENS = 65536
-MAX_PALETTE = 65535
 MAX_PARAMS = 256
 MAX_ASSET_DECLS = 4096
 
@@ -590,7 +589,8 @@ class Builder(object):
         count = len(palette)
         if count >= 65536:
             return  # 无档位可派生,跳过本阶段,留给阶段 9 报 PXL005
-        derived = "char" if count <= 61 else ("index" if count <= 255 else "index4")
+        derived = ("char" if count <= TIER_MAX_SLOT["char"]
+                   else ("index" if count <= TIER_MAX_SLOT["index"] else "index4"))
         if self.encoding != derived:
             raise PxlError("PXL003", "palette 长度 " + str(count) + " 派生出的档位是 "
                            + derived + ",与声明的 " + self.encoding + " 不一致")
@@ -722,15 +722,3 @@ def _escape_char(char):
     if code < 0x20 or code == 0x7F:
         return "U+" + format(code, "04X")
     return repr(char)
-
-
-def build_document(root, byte_length, version, asset_decls=None, assets=None, params=None):
-    builder = Builder(root, byte_length, version, asset_decls, assets, params)
-    builder.stage3()
-    builder.stage4()
-    builder.stage5()
-    builder.stage6()
-    builder.stage7()
-    builder.stage8()
-    builder.stage9()
-    return builder.build()

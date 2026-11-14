@@ -105,12 +105,37 @@ class CorpusIndexTest(unittest.TestCase):
                     self.assertRegex(text[:-1], CODE, str(error))
 
     def test_expected_pixel_digests_are_lowercase_sha256(self):
+        scanned = 0
         for path in CONF.rglob("expected*.pixels.sha256"):
+            scanned += 1
             self.assertRegex(path.read_text(encoding="utf-8").strip(), SHA256, str(path))
+        # 空集合守卫：路径/目录改名后判据会静默变成"零条通过"。
+        self.assertGreater(scanned, 0, "一份像素摘要都没扫到")
 
     def test_json_carriers_are_objects(self):
+        scanned = 0
         for path in CONF.rglob("bindings.json"):
+            scanned += 1
             self.assertIsInstance(json.loads(path.read_text(encoding="utf-8")), dict, str(path))
+        self.assertGreater(scanned, 0, "一份 bindings.json 都没扫到")
+
+    def test_every_error_code_has_a_negative_case(self):
+        """每个 PXL001..PXL012 至少要有一条负例（Core §11.2 + Extension §11.1）。
+
+        只写"正则允许 PXL001..PXL012"等于允许反而不要求：加一个码而没有人钉它，
+        门禁不会红。这条把"每个码都被钉住"变成可执行断言。
+        """
+        covered = set()
+        for suite, root in SUITES.items():
+            for row in rows(root / "CASES.tsv"):
+                if not row["case"].startswith("negative/"):
+                    continue
+                error = root / "cases" / row["case"] / "expected.error"
+                if error.is_file():
+                    covered.add(error.read_text(encoding="utf-8").strip())
+        expected = set("PXL%03d" % number for number in range(1, 13))
+        self.assertEqual(sorted(expected - covered), [],
+                         "以下错误码没有任何负例")
 
     def test_component_oracle_is_python38_syntax(self):
         path = CONF / "v1" / "tools" / "compiler_render_ref.py"

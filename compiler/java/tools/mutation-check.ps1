@@ -15,7 +15,7 @@
 
 $ErrorActionPreference = 'Stop'
 
-# 本机 %USERPROFILE%\.gradle 对沙箱只读，Gradle 解原生库会失败；仓库约定用
+# 本机用户目录下的 .gradle 对沙箱只读，Gradle 解原生库会失败；仓库约定用
 # <repo>/.gradle-home。脚本自己兜底，免得"忘了设环境变量"被误读成"编译不过"。
 if (-not $env:GRADLE_USER_HOME) {
     $localHome = Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path '.gradle-home'
@@ -24,18 +24,20 @@ if (-not $env:GRADLE_USER_HOME) {
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $core = Join-Path $repo 'compiler/java'
 # JAVA_HOME 未设时不能把空串丢给 Test-Path（PowerShell 会因空 Path 直接报错，
-# 脚本在回退前就终止）。先判空，再回退到本机默认 JDK。
+# 脚本在回退前就终止）。先判空，再回退到 PATH 上的 java。
+# 这里**不写死任何安装路径**：写死会让脚本只在作者那台机器上可用，
+# 也会把私有目录结构带进仓库（tests/test_public_release.py 会拦）。
 $java = ''
 if ($env:JAVA_HOME) {
     $candidate = Join-Path $env:JAVA_HOME 'bin\java.exe'
     if (Test-Path $candidate) { $java = $candidate }
 }
 if (-not $java) {
-    $fallback = 'C:\Program Files\BellSoft\LibericaJDK-21\bin\java.exe'
-    if (Test-Path $fallback) { $java = $fallback }
+    $onPath = Get-Command java.exe -ErrorAction SilentlyContinue
+    if ($onPath) { $java = $onPath.Source }
 }
 if (-not $java) {
-    Write-Host '找不到可用的 java（设 JAVA_HOME 或安装 Liberica 21）'
+    Write-Host '找不到可用的 java（设 JAVA_HOME，或把 JDK 21 的 bin 放进 PATH）'
     exit 1
 }
 
