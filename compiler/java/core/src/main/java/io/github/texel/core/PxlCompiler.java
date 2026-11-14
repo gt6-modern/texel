@@ -714,13 +714,17 @@ public final class PxlCompiler {
         }
 
         private String canonicalKey(Map<String, Json.Value> canonical) {
+            // 顺序必须**显式**排。`canonical` 现在是按 ASCII 升序填的 LinkedHashMap，所以
+            // "不排序也恰好对"；但节点身份串不该依赖"上游恰好按序填"这种隐含约定——契约 2
+            // 明确禁止依赖哈希迭代顺序，把这里的正确性外包给别处就是下一次漂移的入口。
+            List<String> names = new ArrayList<String>(canonical.keySet());
+            Collections.sort(names);
             StringBuilder out = new StringBuilder();
-            for (Map.Entry<String, Json.Value> item : canonical.entrySet()) {
+            for (String name : names) {
                 if (out.length() > 0) {
                     out.append(',');
                 }
-                out.append(item.getKey()).append('=')
-                        .append(identityText(item.getValue()));
+                out.append(name).append('=').append(identityText(canonical.get(name)));
             }
             return out.toString();
         }
