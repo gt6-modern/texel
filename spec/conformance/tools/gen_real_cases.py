@@ -527,6 +527,9 @@ def build_batch(case, paths, clauses, aggregate_lines, manifest_limit=None):
             members[member] = {
                 "input.png": payload,
                 "expected.error": b"PXL006\n",
+                # 拒绝原因也必须钉住（Core §13.1 / §13.2c）：这一排缺陷都报 PXL006，
+                # 只判码时"CRC 错被别的分支拒掉"照样通过。
+                "expected.error_detail": "iCCP 的 CRC\n".encode("utf-8"),
                 "notes.md": _defect_notes(case, member, relative,
                                           crc[0], crc[1], suite=case).encode("utf-8"),
             }
@@ -628,6 +631,7 @@ def build_aerotheum_negative():
     return {
         "input.png": payload,
         "expected.error": b"PXL006\n",
+        "expected.error_detail": "iCCP 的 CRC\n".encode("utf-8"),
         "notes.md": notes.encode("utf-8"),
     }
 

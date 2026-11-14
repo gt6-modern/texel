@@ -5,6 +5,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 
 ## [Unreleased]
 
+### Added
+- `expected.error_detail`: an optional negative-case file (Core §13.1, §13.2c; Extension §13.3.4)
+  holding one substring per line. When present, a failing implementation must match at least one
+  line, so "rejected with the right code for the wrong reason" no longer passes. Applied to the
+  38 PNG rejects that all share `PXL006`; `python_ref_verify` and the Java PNG gate both enforce it.
+
 ### Fixed
 - The normative text claimed `PXL001` for every non-zero `version` while the wire format has
   been version 1 throughout. `spec/PXL.md` now states one rule in Core §3.2, §11 and §12:

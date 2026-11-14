@@ -216,6 +216,53 @@ def negative_render(case, code, clauses, reason, text):
                   "clauses": clauses, "reason": reason, "text": text})
 
 
+#: "同码不同因"负例的拒绝原因 token（规范 Core §13.1 / §13.2c）。
+#:
+#: 每个值是一行或多行**子串**，实现失败消息必须命中其中至少一行。这里给两个实现各写一行
+#: 是因为规范只约束码、不约束错误文本；一行也不许拿别的分支的理由来凑。
+#: 覆盖的是那一排共享 `PXL006` 的 PNG 缺陷：只判码时，"签名错被 CRC 分支拒掉"照样通过。
+REJECT_DETAILS = {
+    "neg-adam7": ["交错"],
+    "neg-bitdepth1": ["只接受 8"],
+    "neg-bitdepth2": ["只接受 8"],
+    "neg-bitdepth4": ["只接受 8"],
+    "neg-bitdepth16": ["只接受 8"],
+    "neg-png-area-over-limit": ["超过上界 4194304", "像素面积超过 2^22"],
+    "neg-png-bad-signature": ["PNG 签名不匹配", "PNG 签名不符"],
+    "neg-png-chunk-length-high-bit": ["chunk 长度"],
+    "neg-png-chunk-reserved-bit": ["保留位"],
+    "neg-png-chunk-truncated": ["越出文件末尾", "越过文件尾"],
+    "neg-png-chunk-type-invalid": ["chunk 类型名"],
+    "neg-png-crc": ["chunk IDAT 的 CRC 不匹配", "chunk IDAT 的 CRC 不符"],
+    "neg-png-ct5": ["色彩类型 5"],
+    "neg-png-data-after-iend": ["IEND 之后"],
+    "neg-png-duplicate-chunk": ["PLTE 出现", "PLTE 至多一个"],
+    "neg-png-filter-illegal": ["0..4"],
+    "neg-png-idat-noncontiguous": ["IDAT 不连续", "IDAT 必须连续出现"],
+    "neg-png-iend-crc": ["IEND 的 CRC"],
+    "neg-png-iend-length": ["IEND 数据长度", "IEND 的长度必须为 0"],
+    "neg-png-ihdr-compression-method": ["压缩方法"],
+    "neg-png-ihdr-filter-method": ["过滤方法"],
+    "neg-png-ihdr-length": ["IHDR 数据长度", "IHDR 长度必须是 13"],
+    "neg-png-index-beyond-plte": ["调色板索引"],
+    "neg-png-inflated-too-long": ["解压结果过长", "解压后字节数超过", "IDAT 不是恰好一个完整 zlib 流"],
+    "neg-png-inflated-too-short": ["解压后字节数"],
+    "neg-png-missing-idat": ["缺少 IDAT"],
+    "neg-png-missing-iend": ["缺少 IEND"],
+    "neg-png-palette-missing-plte": ["色彩类型 3 缺少 PLTE", "色彩类型 3 必须有 PLTE"],
+    "neg-png-plte-after-idat": ["PLTE 不早于第一个 IDAT", "PLTE 必须早于第一个 IDAT"],
+    "neg-png-plte-forbidden-gray": ["色彩类型 0 不得有 PLTE"],
+    "neg-png-size-over-limit": ["65536"],
+    "neg-png-trns-bad-length": ["色彩类型 0 的 tRNS"],
+    "neg-png-trns-before-plte": ["tRNS 早于 PLTE", "tRNS 存在时 PLTE 必须更早", "tRNS 长度超过 PLTE 项数"],
+    "neg-png-trns-forbidden-rgba": ["色彩类型 6 不得有 tRNS"],
+    "neg-png-unknown-critical": ["critical chunk"],
+    "neg-png-zlib-adler": ["zlib 流非法", "zlib 数据非法"],
+    "neg-png-zlib-trailing": ["zlib 流之后还有"],
+    "neg-real-aerotheum-iccp-crc": ["iCCP 的 CRC"],
+}
+
+
 def negative_extract(case, code, clauses, reason, data):
     CASES.append({"case": case, "kind": "negative-extract", "code": code,
                   "clauses": clauses, "reason": reason, "png": data})
@@ -1888,11 +1935,15 @@ def build_case(entry):
             entry, "抽取侧(目录内只有 `input.png`,抽取器根本不读 PXL)", "input.png",
             ["`input.png` 实测 **%d 字节**;本目录没有 `input.pxl`,也没有任何期望像素文件。"
              % len(payload)])
-        return {
+        files = {
             "input.png": payload,
             "expected.error": (entry["code"] + "\n").encode("ascii"),
             "notes.md": notes.encode("utf-8"),
-        }, None, None, None
+        }
+        detail = REJECT_DETAILS.get(entry["case"].split("/")[-1])
+        if detail:
+            files["expected.error_detail"] = ("\n".join(detail) + "\n").encode("utf-8")
+        return files, None, None, None
 
     raise AssertionError("未知形态: %r" % (entry["kind"],))
 

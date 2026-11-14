@@ -376,6 +376,24 @@ def verify_render_only(report, case):
 # 形态:负例
 # --------------------------------------------------------------------------
 
+def _check_detail(report, case, directory, message):
+    """Core §13.1 / §13.2c：有 `expected.error_detail` 时,失败消息必须命中其中至少一行。
+
+    只判码时"码对了但错在别的分支"照样通过——一排队 PNG 缺陷都报 PXL006,签名错被 CRC
+    分支拒掉也能过。这里把**拒绝原因**也钉住。
+    """
+    detail_file = directory / "expected.error_detail"
+    if not detail_file.is_file():
+        return
+    wanted = [line for line in detail_file.read_text(encoding="utf-8").splitlines() if line]
+    if not wanted:
+        report.fail(case, "expected.error_detail 是空文件")
+        return
+    report.check(any(token in message for token in wanted), case,
+                 "失败消息没有命中 expected.error_detail 的任何一行: %r / %r"
+                 % (message, wanted))
+
+
 def verify_negative(report, case, row):
     directory = case_dir(case)
     has_pxl = (directory / "input.pxl").is_file()
@@ -417,6 +435,7 @@ def verify_negative(report, case, row):
             report.check(error.code == expected, case,
                          "oracle 报 %s,期望 %s(%s)" % (error.code, expected,
                                                       error.message))
+            _check_detail(report, case, directory, error.message)
         else:
             report.fail(case, "oracle 未拒绝该文档(期望 %s)" % expected)
         return
@@ -427,6 +446,7 @@ def verify_negative(report, case, row):
     except PxlError as error:
         report.check(error.code == expected, case,
                      "抽取器报 %s,期望 %s" % (error.code, expected))
+        _check_detail(report, case, directory, error.message)
     else:
         report.fail(case, "抽取器未拒绝该输入(期望 %s)" % expected)
 

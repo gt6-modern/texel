@@ -1,0 +1,3 @@
+tRNS 早于 PLTE
+tRNS 存在时 PLTE 必须更早
+tRNS 长度超过 PLTE 项数

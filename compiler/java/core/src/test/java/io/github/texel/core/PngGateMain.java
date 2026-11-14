@@ -122,6 +122,27 @@ public final class PngGateMain {
             if (!Codes.PXL006.equals(failure.code())) {
                 FAILURES.add(casePath + "：拒绝码应为 PXL006，实际 " + failure.code());
             }
+            // Core §13.1 / §13.2c：有 expected.error_detail 时，失败消息必须命中其中至少一行。
+            // 只判码时"码对了但错在别的分支"照样通过（签名错被 CRC 分支拒掉也算过）。
+            Path detail = input.getParent().resolve("expected.error_detail");
+            if (Files.isRegularFile(detail)) {
+                boolean matched = false;
+                try {
+                    for (String line : Files.readAllLines(detail, UTF8)) {
+                        if (!line.isEmpty() && failure.getMessage().contains(line)) {
+                            matched = true;
+                            break;
+                        }
+                    }
+                } catch (IOException broken) {
+                    FAILURES.add(casePath + "：读 expected.error_detail 失败 " + broken);
+                    return;
+                }
+                if (!matched) {
+                    FAILURES.add(casePath + "：失败消息没有命中 expected.error_detail 的任何一行（实际 "
+                            + failure.getMessage() + "）");
+                }
+            }
         } catch (IOException failure) {
             FAILURES.add(casePath + "：读文件失败 " + failure);
         }

@@ -129,7 +129,13 @@ Bindings, asset declarations, filesystem results, and manifest rows are processe
 
 ## Extension §13 Conformance
 
-The repository corpus is the executable acceptance boundary. Positive cases assert dimensions, RGBA8 SHA-256, dependency manifests, and repeatability. Negative cases assert the exact first error and absence of partial output. Generated cases carry reproducible recipes; every checked-in expectation must be independently derivable rather than copied from one tested compiler.
+The repository corpus is the executable acceptance boundary. Positive cases assert dimensions, RGBA8 SHA-256, dependency manifests,
+
+A negative case passes only when the implementation fails with the code in `expected.error`, writes no output file, and — when the
+case also carries the optional `expected.error_detail` file — its failure message contains at least one of the lines in that file
+(case-sensitive substring). Detail exists because many distinct defects share one code: with the code alone, a corrupted signature
+rejected by the CRC branch would still pass. Multiple lines are allowed so that each implementation's own wording can match; the
+specification constrains the code, never the message text. Without the file, only the code is judged. and repeatability. Negative cases assert the exact first error and absence of partial output. Generated cases carry reproducible recipes; every checked-in expectation must be independently derivable rather than copied from one tested compiler.
 
 ## Extension §14 Reserved features
 
