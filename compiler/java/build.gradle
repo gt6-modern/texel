@@ -25,6 +25,11 @@ subprojects {
     tasks.withType(Javadoc).configureEach {
         options.encoding = 'UTF-8'
         options.charSet = 'UTF-8'
+        // 语言必须钉死：javadoc 生成的 HTML 里带本地化文案（"Deprecated"、"导航"等），
+        // 不钉 locale 时 zh_CN 的 Windows 与 en_US 的 CI 会产出**不同的 javadoc jar 字节**，
+        // 而那份 jar 是要发布到 Maven Central 的（契约 2：产物不得依赖 locale）。
+        // 顺带解决 Windows 控制台里 javadoc 中文警告的 GBK/UTF-8 错位（"锟斤拷"）。
+        options.locale = 'en_US'
         options.addStringOption('Xdoclint:none', '-quiet')
     }
 
