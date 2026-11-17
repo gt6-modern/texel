@@ -89,6 +89,17 @@ subprojects {
     signing {
         required { signingKey.isPresent() }
         if (signingKey.isPresent()) {
+            // 材料形态检查：Gradle 在"给了密钥但里面没有私钥"时只抛
+            // `Cannot invoke "PGPPrivateKey.getPublicKeyPacket()" because "<parameter1>" is null`，
+            // 完全指不出原因（Release run #6 实测）。两种最常见的错填是：贴了**公钥**、
+            // 或导出时漏了**子密钥**。前者在这里直接拦掉，后者在下面的提示里点名。
+            if (!signingKey.get().contains('-----BEGIN PGP PRIVATE KEY BLOCK-----')) {
+                throw new GradleException(
+                        'MAVEN_GPG_PRIVATE_KEY 不是 ASCII-armored **私钥**：'
+                        + '缺少 "-----BEGIN PGP PRIVATE KEY BLOCK-----"。'
+                        + '用 `gpg --armor --export-secret-keys <KEY_ID>` 导出，'
+                        + '整份粘贴（含 BEGIN/END 两行，含子密钥）。')
+            }
             useInMemoryPgpKeys(signingKey.get(), signingPassword.getOrElse(''))
             sign publishing.publications.mavenJava
         }
