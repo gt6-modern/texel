@@ -105,6 +105,13 @@ subprojects {
                         + '用 `gpg --armor --export-secret-keys <KEY_ID>` 导出，'
                         + '整份粘贴（含 BEGIN/END 两行，含子密钥）。')
             }
+            // 诊断行：只报长度与行数，不泄漏内容。Release run #6 / #8 的失败形态是"材料看起来
+            // 是私钥、但里面没有可用的签名私钥"——最常见的原因是 `gpg --export-secret-subkeys`
+            // 导出的文件（主密钥是 gnu-dummy，只有不能签名的加密子密钥带私钥材料）。
+            // 和本地能签的那份文件比长度，一眼就能看出 secret 里到底装的是哪一份。
+            logger.lifecycle('MAVEN_GPG_PRIVATE_KEY 材料: '
+                    + signingKey.get().length() + ' 字节 / '
+                    + signingKey.get().readLines().size() + ' 行')
             useInMemoryPgpKeys(signingKey.get(), signingPassword.getOrElse(''))
             sign publishing.publications.mavenJava
         }
