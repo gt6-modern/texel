@@ -22,6 +22,14 @@ subprojects {
         options.compilerArgs += ['-Xlint:all,-serial,-processing,-options']
     }
 
+    // 产物字节必须可复现：默认的 jar 会把每个条目的修改时间写进 zip 头，还按文件系统顺序排条目，
+    // 于是同一份源码在两次构建里产出不同字节。这些 jar 要发到 Maven Central，而且 GitHub Release
+    // 上的资产与注册表里的应当是同一份（2026-11-18 发布时实测：两次构建的 jar/zip 摘要不同）。
+    tasks.withType(Jar).configureEach {
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+    }
+
     tasks.withType(Javadoc).configureEach {
         options.encoding = 'UTF-8'
         options.charSet = 'UTF-8'

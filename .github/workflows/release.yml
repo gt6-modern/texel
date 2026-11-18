@@ -43,6 +43,10 @@ jobs:
           fi
           # 后续步骤（SBOM 文件名等）从这里取版本，不再把 0.1.0 写死在工作流里。
           echo "value=$version" >> "$GITHUB_OUTPUT"
+          # 提交时间当作 SOURCE_DATE_EPOCH：Python 分发包据此固定条目时间戳，
+          # 否则同一份源码两次构建的 wheel/sdist 字节不同（GitHub Release 的资产
+          # 就会和 PyPI 上那份对不上）。
+          echo "epoch=$(git log -1 --format=%ct)" >> "$GITHUB_OUTPUT"
       - name: Generate corpus and run Python gates
         run: |
           python spec/conformance/tools/gen_cases.py --all
@@ -57,6 +61,8 @@ jobs:
         working-directory: compiler/java
         run: ./gradlew --no-daemon clean check installDist centralBundle -Ppython=python
       - name: Build Python distributions
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.version.outputs.epoch }}
         run: |
           python -m pip install --disable-pip-version-check build
           python -m build --outdir dist/importer .
@@ -242,13 +248,20 @@ jobs:
         with:
           name: release-assets
           path: dist
-      # 正文取自 CHANGELOG 的对应小节。只靠 generate_release_notes 时，没有上一个 release
-      # 可比对，GitHub 只会给出一行 "**Full Changelog**: …"，发布页等于没有内容。
+      # 正文取自 CHANGELOG 的对应小节。注意 `generate_release_notes: true` 会**覆盖** body，
+      # 它和 body_path 同时给等于白给（run #13 实测：正文仍是那一行 "**Full Changelog**"）。
+      # 所以这里不用它，改成自己补一条 compare 链接。
       - name: Compose the release body from CHANGELOG
         shell: bash
-        run: python tools/release_notes.py > release-notes.md
+        run: |
+          python tools/release_notes.py > release-notes.md
+          previous=$(git describe --tags --abbrev=0 --match 'v*' HEAD^ 2>/dev/null || true)
+          if [ -n "$previous" ] && [ "$previous" != "$GITHUB_REF_NAME" ]; then
+            printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' \
+              "$GITHUB_REPOSITORY" "$previous" "$GITHUB_REF_NAME" >> release-notes.md
+          fi
+          cat release-notes.md
       - uses: softprops/action-gh-release@v2
         with:
           body_path: release-notes.md
-          generate_release_notes: true
           files: dist/*
