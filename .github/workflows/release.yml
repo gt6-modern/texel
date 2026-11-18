@@ -282,14 +282,16 @@ jobs:
             published=true
           fi
           assets=$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets | length' 2>/dev/null || echo 0)
-          # 只有"已发布 **且** 发布页上确实挂着资产"才跳过上传：否则一个丢了发布页的
-          # 版本会永远修不回来（2026-11-18 实测：只剩 PyPI/Central 有，Release 页面没了）。
-          if [ "$published" = "true" ] && [ "${assets:-0}" -gt 0 ]; then
+          draft=$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq '.isDraft' 2>/dev/null || echo true)
+          # 只有"已发布 **且** 发布页已公开、确实挂着资产"才跳过上传。草稿发布页对
+          # 未认证读者是 404（2026-11-18 实测：PyPI/Central 有 0.1.0，而 GitHub 的
+          # releases 列表是空的，其实那是一个带资产的草稿），所以草稿必须重传+发布。
+          if [ "$published" = "true" ] && [ "${assets:-0}" -gt 0 ] && [ "$draft" != "true" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "已发布且资产在册：保留现有字节，只刷新正文"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "需要上传资产（published=$published assets=${assets:-0}）"
+            echo "需要上传资产（published=$published assets=${assets:-0} draft=$draft）"
           fi
       - uses: softprops/action-gh-release@v2
         if: steps.published.outputs.skip != 'true'
@@ -305,7 +307,8 @@ jobs:
         shell: bash
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release edit "$GITHUB_REF_NAME" --notes-file release-notes.md
+            # --draft=false：动作留下的草稿页对公众是 404，必须显式发布。
+            gh release edit "$GITHUB_REF_NAME" --notes-file release-notes.md --draft=false
           else
             gh release create "$GITHUB_REF_NAME" --notes-file release-notes.md
           fi
