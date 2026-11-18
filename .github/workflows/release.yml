@@ -68,11 +68,17 @@ jobs:
           python -m build --outdir dist/importer .
           python -m build --outdir dist/compiler compiler/python
       - name: Assemble release assets
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.version.outputs.epoch }}
         shell: bash
         run: |
           version=$(cat VERSION)
           mkdir -p dist/release
-          tar -C compiler/java/cli/build/install -czf "dist/release/texel-cli-$version.tar.gz" texel-compiler
+          # 打包也要可复现：tar 默认写入文件的真实修改时间与目录枚举顺序，gzip 还写自己的时间戳。
+          # 不钉的话同一个提交两次打包会得到不同字节（2026-11-18 实测）。-n 让 gzip 不写名字/时间。
+          tar --sort=name --mtime="@$SOURCE_DATE_EPOCH" --owner=0 --group=0 --numeric-owner \
+            -C compiler/java/cli/build/install -cf - texel-compiler \
+            | gzip -n -9 > "dist/release/texel-cli-$version.tar.gz"
           cp compiler/java/build/distributions/*.zip dist/release/
           cp dist/importer/* dist/compiler/* dist/release/
           cp compiler/java/build/distributions/*-central.zip dist/release/
@@ -261,7 +267,23 @@ jobs:
               "$GITHUB_REPOSITORY" "$previous" "$GITHUB_REF_NAME" >> release-notes.md
           fi
           cat release-notes.md
+      # 已发布的版本不再替换资产：注册表里的字节不可变，而重新构建出来的同版本文件哪怕
+      # 语义相同、摘要也可能不同（Python sdist 至今没做到字节稳定），换了就等于让发布页
+      # 和 PyPI/Central 上那份对不上。重跑时只刷新正文。
+      - name: Is this version already published?
+        id: published
+        shell: bash
+        run: |
+          version=$(cat VERSION)
+          if curl -fsS "https://pypi.org/pypi/texel-importer/$version/json" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "$version 已发布：保留现有资产，只刷新正文"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "$version 尚未发布：上传资产"
+          fi
       - uses: softprops/action-gh-release@v2
+        if: steps.published.outputs.skip != 'true'
         with:
           body_path: release-notes.md
           files: dist/*
@@ -272,4 +294,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
-        run: gh release edit "$GITHUB_REF_NAME" --notes-file release-notes.md
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --notes-file release-notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" --notes-file release-notes.md
+          fi

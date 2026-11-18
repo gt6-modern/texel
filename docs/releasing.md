@@ -141,13 +141,22 @@ registries recorded — they must be the same bytes.
 
 ## 6. Re-running a failed release
 
-Re-run the failed jobs of the same run rather than moving the tag. Both registry
-uploads are idempotent:
+Re-run the failed jobs of the same run rather than moving the tag. All three uploads
+are idempotent:
 
 - Central: the job probes `repo1` for `texel-core-X.Y.Z.pom` and skips the upload
   when the version is already published.
 - PyPI: each job probes `https://pypi.org/pypi/<project>/X.Y.Z/json` and skips the
   upload when the version is already there.
+- GitHub Release: assets are only uploaded while the version is unpublished; a
+  re-run refreshes the body from `CHANGELOG.md` and leaves the assets alone.
+
+That last rule exists because a published version's bytes are final. Rebuilding the
+same commit produces the same jars (Gradle archives are pinned with
+`preserveFileTimestamps = false` and `reproducibleFileOrder = true`) and the same
+wheels (`SOURCE_DATE_EPOCH` is the commit time), but the sdist and the SPDX SBOM
+still carry build-time data, so replacing assets on a re-run could leave the release
+page describing files that no longer match what PyPI and Central accepted.
 
 If the tag itself must move (the tagged commit was wrong and nothing has been
 published yet), delete and re-create the tag. Once a version is published, moving
