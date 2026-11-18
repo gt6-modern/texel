@@ -126,7 +126,26 @@ jobs:
         with:
           name: python-distributions-importer
           path: dist/python
+      # 发布必须可重跑：同一个版本重复上传 PyPI 会被拒（"File already exists"），
+      # 那样重跑就永远绿不了。先问 PyPI 的 JSON API（公开、不需要凭据），已发布就跳过。
+      - name: Skip when this version is already on PyPI
+        id: published
+        env:
+          PROJECT: texel-importer
+        shell: bash
+        run: |
+          wheel=$(ls dist/python/*.whl | head -1)
+          test -n "$wheel"
+          version=$(basename "$wheel" | sed -E 's/^[^-]+-([^-]+)-.*$/\1/')
+          if curl -fsS "https://pypi.org/pypi/$PROJECT/$version/json" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "$PROJECT $version 已在 PyPI 上，跳过上传"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "PyPI 上还没有 $PROJECT $version，继续上传"
+          fi
       - uses: pypa/gh-action-pypi-publish@release/v1
+        if: steps.published.outputs.skip != 'true'
         with:
           packages-dir: dist/python/
           skip-existing: false
@@ -143,7 +162,24 @@ jobs:
         with:
           name: python-distributions-compiler
           path: dist/python
+      - name: Skip when this version is already on PyPI
+        id: published
+        env:
+          PROJECT: texel-compiler
+        shell: bash
+        run: |
+          wheel=$(ls dist/python/*.whl | head -1)
+          test -n "$wheel"
+          version=$(basename "$wheel" | sed -E 's/^[^-]+-([^-]+)-.*$/\1/')
+          if curl -fsS "https://pypi.org/pypi/$PROJECT/$version/json" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "$PROJECT $version 已在 PyPI 上，跳过上传"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "PyPI 上还没有 $PROJECT $version，继续上传"
+          fi
       - uses: pypa/gh-action-pypi-publish@release/v1
+        if: steps.published.outputs.skip != 'true'
         with:
           packages-dir: dist/python/
           skip-existing: false
@@ -201,11 +237,18 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: release-assets
           path: dist
+      # 正文取自 CHANGELOG 的对应小节。只靠 generate_release_notes 时，没有上一个 release
+      # 可比对，GitHub 只会给出一行 "**Full Changelog**: …"，发布页等于没有内容。
+      - name: Compose the release body from CHANGELOG
+        shell: bash
+        run: python tools/release_notes.py > release-notes.md
       - uses: softprops/action-gh-release@v2
         with:
+          body_path: release-notes.md
           generate_release_notes: true
           files: dist/*
