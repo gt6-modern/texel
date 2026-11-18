@@ -265,3 +265,11 @@ jobs:
         with:
           body_path: release-notes.md
           files: dist/*
+      # 上面那一步在"该 tag 已有 release"时只换资产、不写正文（run #14 实测：它先建草稿、
+      # 发现已有 release 就删掉草稿并沿用旧的，正文停在当初自动生成的那一行）。
+      # 正文改用 gh 显式设置，两条路径都一致。
+      - name: Ensure the release body matches CHANGELOG
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: gh release edit "$GITHUB_REF_NAME" --notes-file release-notes.md
