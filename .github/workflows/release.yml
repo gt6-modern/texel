@@ -270,17 +270,26 @@ jobs:
       # 已发布的版本不再替换资产：注册表里的字节不可变，而重新构建出来的同版本文件哪怕
       # 语义相同、摘要也可能不同（Python sdist 至今没做到字节稳定），换了就等于让发布页
       # 和 PyPI/Central 上那份对不上。重跑时只刷新正文。
-      - name: Is this version already published?
+      - name: Are the assets already released?
         id: published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           version=$(cat VERSION)
+          published=false
           if curl -fsS "https://pypi.org/pypi/texel-importer/$version/json" >/dev/null 2>&1; then
+            published=true
+          fi
+          assets=$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets | length' 2>/dev/null || echo 0)
+          # 只有"已发布 **且** 发布页上确实挂着资产"才跳过上传：否则一个丢了发布页的
+          # 版本会永远修不回来（2026-11-18 实测：只剩 PyPI/Central 有，Release 页面没了）。
+          if [ "$published" = "true" ] && [ "${assets:-0}" -gt 0 ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "$version 已发布：保留现有资产，只刷新正文"
+            echo "已发布且资产在册：保留现有字节，只刷新正文"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "$version 尚未发布：上传资产"
+            echo "需要上传资产（published=$published assets=${assets:-0}）"
           fi
       - uses: softprops/action-gh-release@v2
         if: steps.published.outputs.skip != 'true'
