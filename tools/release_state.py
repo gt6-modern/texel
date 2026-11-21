@@ -1,5 +1,6 @@
 """Fail-closed GitHub Release response parser and action planner."""
 
+# Temporary external-fork CodeQL probe; no runtime behavior change.
 import argparse
 import json
 import re
