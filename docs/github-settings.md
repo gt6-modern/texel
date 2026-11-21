@@ -140,9 +140,9 @@ version assertions in test_public_release.py and the compiler_version assertion
 in test_capabilities.py. The latter was discovered by the first real fork run;
 run the full test suite before creating a protected tag. Validate metadata/tests before tags.
 
-- Original slot `0.999.1` (final successful slot recorded in implementation evidence): missing -> draft -> upload -> verify -> publish; rerun is a complete
+- Original slot `0.999.5` (final successful slot recorded in implementation evidence): missing -> draft -> upload -> verify -> publish; rerun is a complete
   published no-op, including unchanged body, title and asset digests.
-- Original slot `0.999.2` (final successful slot recorded in implementation evidence): disable the Release workflow while pushing the tag and preparing a
+- Original slot `0.999.6` (final successful slot recorded in implementation evidence): disable the Release workflow while pushing the tag and preparing a
   partial old draft, then enable it and dispatch on that tag. Prove the old draft
   is deleted without deleting the tag, rebuilt and published only after validation.
 - Attempt asset replacement and protected tag deletion in the fork; both must fail.
