@@ -72,17 +72,23 @@ be filled in.
 ### GitHub environments
 
 `release` (GPG secrets), `pypi-importer`, `pypi-compiler`, `maven-central` (Portal
-token). Add required reviewers to `release` and `maven-central` if the build should
-wait for a human.
+token). Only `release` requires one approval from either maintainer, with
+`can_admins_bypass: false` and `prevent_self_review: false`. The triggerer may
+approve their own deployment. The three registry environments have no second
+approval. `release` admits branch `master` and tags `v*`; registry environments
+admit only tags `v*`. Branch and tag policies have distinct API types.
+See [GitHub settings](github-settings.md) for the complete configuration.
 
 ## 2. Bump the version
 
-The same version appears in six places, all checked by
-`python tools/check_release_metadata.py`:
+Update all eight release surfaces below (including the CHANGELOG section).
+`python tools/check_release_metadata.py` checks the shared metadata; also update
+`__version__` and the three version assertions in `tests/test_public_release.py`:
 
 - `VERSION`
 - `pyproject.toml`, `compiler/python/pyproject.toml`
 - `compiler/python/texel_compiler/capabilities.py` (`COMPILER_VERSION`)
+- `compiler/python/texel_compiler/__init__.py` (`__version__`)
 - `compiler/java/cli/src/main/java/io/github/texel/cli/Capabilities.java`
 - `spec/conformance/capabilities/pxl-v1.json`
 
@@ -110,7 +116,10 @@ cd compiler/java && ./gradlew --no-daemon :core:signMavenJavaPublication
 
 Optional dry run: run the workflow manually with `dry_run: true`. It builds and
 verifies everything — including the Central bundle, which is unsigned when no key
-is configured — and publishes nothing.
+is configured — and publishes nothing. Run it from `master` and approve the
+`release` environment. It does not exercise the GitHub Release state machine:
+all publishing jobs require a tag. Use the isolated fork rehearsal described in
+[GitHub settings](github-settings.md) before enabling immutable releases.
 
 ## 4. Publish
 
@@ -148,8 +157,18 @@ are idempotent:
   when the version is already published.
 - PyPI: each job probes `https://pypi.org/pypi/<project>/X.Y.Z/json` and skips the
   upload when the version is already there.
-- GitHub Release: assets are only uploaded while the version is unpublished; a
-  re-run refreshes the body from `CHANGELOG.md` and leaves the assets alone.
+- GitHub Release: HTTP 404 plus an authenticated, fully paginated listing with no matching release creates a draft; an existing draft is deleted without
+  deleting its tag, then rebuilt from this run's artifacts. All asset names,
+  sizes, upload states and SHA-256 digests must match before publication.
+  An already published release is a complete no-op, including title and body.
+
+The state machine resolves the actual remote tag commit and requires it to match
+the workflow commit. HTTP failures other than the release endpoint's 404 stop the
+run. The tag endpoint returns published releases only; drafts are discovered through
+the authenticated releases listing and checked again by release ID. Any listing
+failure also stops publication. Stderr may be empty or nonempty and is never used to infer a missing release.
+The SBOM is generated before SHA256SUMS; provenance covers all final assets,
+including SHA256SUMS. SHA256SUMS covers every payload including the SBOM.
 
 That last rule exists because a published version's bytes are final. Rebuilding the
 same commit produces the same jars (Gradle archives are pinned with
@@ -158,9 +177,18 @@ wheels (`SOURCE_DATE_EPOCH` is the commit time), but the sdist and the SPDX SBOM
 still carry build-time data, so replacing assets on a re-run could leave the release
 page describing files that no longer match what PyPI and Central accepted.
 
-If the tag itself must move (the tagged commit was wrong and nothing has been
-published yet), delete and re-create the tag. Once a version is published, moving
-its tag only creates a lie: publish a new patch version.
+Never move or delete a `v*` tag: the tag ruleset has no bypass. If the tagged
+commit is wrong, publish a new patch version. Immutable releases lock assets and
+the associated tag; title and body remain editable, although this workflow does
+not update them on reruns. Enabling repository immutability does not retroactively
+freeze existing releases. `v0.1.0` is deliberately left unchanged: its tag is
+protected by the ruleset but its release assets remain mutable.
+
+If PyPI/Central are already published and GitHub is still a draft, rerun only the
+failed jobs of the original run. The draft is deleted and rebuilt from that run's
+artifacts. Do not rebuild time-dependent signed bundles/SBOMs and assume they match
+registries. If the original artifacts expired, stop and reconcile with the exact
+registry bytes before recovering; otherwise ship a new patch version.
 
 ## 7. Troubleshooting
 
@@ -178,7 +206,8 @@ its tag only creates a lie: publish a new patch version.
 
 ## 8. The GitHub Release body
 
-`python tools/release_notes.py` prints the `CHANGELOG.md` section for the current
-version and the release job uses it as `body_path`; `generate_release_notes: true`
-then appends the full changelog link. Without the curated section a first release
-gets a body consisting of one line.
+`python tools/release_notes.py` prints the current CHANGELOG section. The workflow
+fetches full history and tags, appends its own compare link when a previous tag is
+available, and supplies `--notes-file` when creating the draft. It does not use
+`generate_release_notes`, which previously replaced the curated body. Failure to
+find an earlier tag is logged; the first release can legitimately omit the link.
