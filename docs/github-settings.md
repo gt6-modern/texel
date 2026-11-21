@@ -1,8 +1,9 @@
 # GitHub settings and rollout
 
-This document defines the intended configuration. The implementation record and
-normalized JSON snapshot are added in the second PR after API readback; this first
-PR does not claim that all settings or rehearsals have already been applied.
+This document defines the configuration and rollout procedure. Actual API readback
+is recorded in `github-settings.json`; execution evidence and exceptions are in
+`github-governance-implementation.md`. The snapshot tests check recorded settings,
+not live drift.
 Use `gh api` for settings, `gh pr` for pull requests and `gh workflow` / `gh run`
 for workflows. Save complete pre-change JSON outside the checkout for rollback.
 
@@ -29,7 +30,9 @@ for workflows. Save complete pre-change JSON outside the checkout for rollback.
 The release parser classifies the `gh api --include` stdout status, headers and body.
 The tag endpoint omits drafts: after its 404, exhaust the authenticated releases
 listing and inspect any matching release by ID. Only confirmed absence permits
-creation. Listing failures abort, and stderr never determines release state.
+creation. After creation, retry only confirmed-missing readbacks up to five
+times (two seconds between attempts); never retry a mutation automatically.
+An invisible draft after that bound stops the run. Listing failures abort, and stderr never determines release state.
 
 No formal version is published during this rollout. The first production release
 still needs registry verification: the fork does not upload to PyPI or Central.
@@ -133,11 +136,13 @@ is needed: Gradle can build an unsigned Central bundle for this rehearsal.
 
 For each version change VERSION, both pyprojects, Python capability and __version__,
 Java capability, capability JSON and CHANGELOG (eight files), plus the three pinned
-version assertions in test_public_release.py. Validate metadata/tests before tags.
+version assertions in test_public_release.py and the compiler_version assertion
+in test_capabilities.py. The latter was discovered by the first real fork run;
+run the full test suite before creating a protected tag. Validate metadata/tests before tags.
 
-- `0.999.1`: missing -> draft -> upload -> verify -> publish; rerun is a complete
+- Original slot `0.999.1` (final successful slot recorded in implementation evidence): missing -> draft -> upload -> verify -> publish; rerun is a complete
   published no-op, including unchanged body, title and asset digests.
-- `0.999.2`: disable the Release workflow while pushing the tag and preparing a
+- Original slot `0.999.2` (final successful slot recorded in implementation evidence): disable the Release workflow while pushing the tag and preparing a
   partial old draft, then enable it and dispatch on that tag. Prove the old draft
   is deleted without deleting the tag, rebuilt and published only after validation.
 - Attempt asset replacement and protected tag deletion in the fork; both must fail.
