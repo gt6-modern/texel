@@ -12,7 +12,7 @@ Windows gates. Local verification passed all required AGENTS.md commands:
 427 Python tests (one Windows-inapplicable test skipped), 11,307 reference assertions,
 907 compiler checks (50 importer-only cases skipped), and JDK 21 `clean check`.
 Actionlint v1.7.12 passed with external ShellCheck/Pyflakes disabled.
-Final PR #2 verification repeated all six Python gates and JDK 21 clean check:
+Final verification for the second PR repeated all six Python gates and JDK 21 clean check:
 435 unit tests passed (one platform skip), including six settings-snapshot tests
 and two added visibility-delay tests; reference/compiler counts stayed unchanged.
 
@@ -146,7 +146,7 @@ These changes were preserved. Final read-only hashes follow below.
 
 ## Delivery gate
 
-The second PR contains actual settings evidence, snapshot assertions, updated
+PR #8 contains actual settings evidence, snapshot assertions, updated
 version-bump instructions, and the bounded visibility-read fix validated in the
 fork. It must pass CI and receive the other CODEOWNER approval before merging.
 Until that merge, master retains the fail-closed immediate readback behavior from
