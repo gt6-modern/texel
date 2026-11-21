@@ -14,6 +14,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,11 +27,11 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: liberica
           java-version: "21"
@@ -82,39 +86,43 @@ jobs:
           cp compiler/java/build/distributions/*.zip dist/release/
           cp dist/importer/* dist/compiler/* dist/release/
           cp compiler/java/build/distributions/*-central.zip dist/release/
-          (cd dist/release && sha256sum * > SHA256SUMS)
-      - uses: anchore/sbom-action@v0
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           path: dist/release
           format: spdx-json
           output-file: dist/release/texel-${{ steps.version.outputs.value }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Hash all final assets including the SBOM
+        working-directory: dist/release
+        run: sha256sum * > SHA256SUMS
       # 供应链证明只在公开仓库可用：私有仓库 + 组织免费计划会被 GitHub 直接拒绝
       # （Release run #4 实测："Feature not available for the gt6-modern organization"）。
       # 它不该挡住构建与发布，所以按仓库可见性跳过；公开后自动恢复。
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         if: github.event.repository.private == false
         with:
           subject-path: dist/release/*
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-assets
           path: dist/release/
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: python-distributions-importer
           path: |
             dist/importer/*.whl
             dist/importer/*.tar.gz
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: python-distributions-compiler
           path: |
             dist/compiler/*.whl
             dist/compiler/*.tar.gz
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: central-bundle
           path: compiler/java/build/distributions/*-central.zip
@@ -134,7 +142,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: python-distributions-importer
           path: dist/python
@@ -156,7 +164,7 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
             echo "PyPI 上还没有 $PROJECT $version，继续上传"
           fi
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         if: steps.published.outputs.skip != 'true'
         with:
           packages-dir: dist/python/
@@ -170,7 +178,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: python-distributions-compiler
           path: dist/python
@@ -190,7 +198,7 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
             echo "PyPI 上还没有 $PROJECT $version，继续上传"
           fi
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         if: steps.published.outputs.skip != 'true'
         with:
           packages-dir: dist/python/
@@ -205,7 +213,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: maven-central
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: central-bundle
           path: dist
@@ -249,8 +257,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-assets
           path: dist
@@ -261,47 +275,19 @@ jobs:
         shell: bash
         run: |
           python tools/release_notes.py > release-notes.md
-          previous=$(git describe --tags --abbrev=0 --match 'v*' HEAD^ 2>/dev/null || true)
+          if ! previous=$(git describe --tags --abbrev=0 --match 'v*' HEAD^ 2>&1); then
+            echo "warning: no previous release tag: $previous" >&2
+            previous=""
+          fi
           if [ -n "$previous" ] && [ "$previous" != "$GITHUB_REF_NAME" ]; then
             printf '\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' \
               "$GITHUB_REPOSITORY" "$previous" "$GITHUB_REF_NAME" >> release-notes.md
           fi
           cat release-notes.md
-      # 已发布的版本不再替换资产：注册表里的字节不可变，而重新构建出来的同版本文件哪怕
-      # 语义相同、摘要也可能不同（Python sdist 至今没做到字节稳定），换了就等于让发布页
-      # 和 PyPI/Central 上那份对不上。重跑时只刷新正文。
-      - name: Does the release page exist?
-        id: page
+      - name: Publish verified release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
         run: |
-          # 资产只在**建页那一次**上传：已发布版本的源码与注册表里的那几份是同一批字节，
-          # 之后重建出来的同版本文件摘要还会变（PGP 签名与 SBOM 都带时间戳，sdist 尚未
-          # 字节稳定），再传一遍就等于让发布页和 PyPI/Central 对不上。
-          # 判据用一个动作就能问清的条件：gh release view 成功即页面已存在。
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "发布页已存在：不动资产，只刷新正文并把草稿发布出去"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "发布页不存在：创建并上传资产"
-          fi
-      - uses: softprops/action-gh-release@v2
-        if: steps.page.outputs.exists != 'true'
-        with:
-          body_path: release-notes.md
-          files: dist/*
-      # 页面已存在时（含它是草稿的情况）这里负责：写正文 + --draft=false 发布。
-      # 之前把正文交给 softprops 是错的：它在"该 tag 已有 release"时只换资产、不写正文
-      # （run #14 实测），而它留下的草稿页对公众是 404（run #18 实测）。
-      - name: Publish the release and set its body
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release edit "$GITHUB_REF_NAME" --notes-file release-notes.md --draft=false
-          else
-            gh release create "$GITHUB_REF_NAME" --notes-file release-notes.md
-          fi
+          python tools/release_state.py --publish \
+            --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME" \
+            --expected-sha "$GITHUB_SHA" --assets-dir dist --notes-file release-notes.md
