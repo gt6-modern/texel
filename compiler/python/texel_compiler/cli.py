@@ -805,7 +805,9 @@ def _run_legacy(args):
         for other_source, _other_target, other_parent, other_manifest in manifests:
             clash = pxlcompile.conflicting_source(target, other_parent, other_manifest)
             if clash is not None:
-                conflicts.append(str(source) + ": CLI002: 输出 " + str(target)
+                # 码放在最前：下游按 `CLI00x` 前缀分流（2026-11-14 审查 P2），Java 侧
+                # 的批量冲突也是这个形状（`texel-compiler: CLI002: <源>: 输出 …`）。
+                conflicts.append("CLI002: " + str(source) + ": 输出 " + str(target)
                                  + " 会覆盖 " + str(other_source) + " 的编译依赖 "
                                  + clash + "（未写入）")
                 break

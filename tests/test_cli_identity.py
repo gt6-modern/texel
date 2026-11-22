@@ -285,5 +285,39 @@ class DiagnosticPrefixTest(unittest.TestCase):
                                  "%s 还在用旧前缀 %r" % (path.name, stale))
 
 
+class BatchDiagnosticParityTest(unittest.TestCase):
+    """批量入口的"输出覆盖编译依赖"诊断在两个实现里必须同形。
+
+    这条判据是**文本级**的:Java 侧只能读源码(跑它要 jar),所以断言两边都带着同一句
+    汇总、同一条冲突消息形状、同一个"码在最前"的写法。任何一侧改了措辞或把码挪走,
+    这里就会红——下游按 `CLI00x` 前缀分流,措辞分叉等于契约分叉。
+    """
+
+    PYTHON = COMPILER_CLI.read_text(encoding="utf-8")
+    JAVA = JAVA_MAIN.read_text(encoding="utf-8")
+
+    #: 两个实现共用的字面片段。
+    SUMMARY = "处输出覆盖编译依赖，整批未写入任何文件"
+    CLAIM = " 会覆盖 "
+    DEPENDENCY = " 的编译依赖 "
+    NOT_WRITTEN = "（未写入）"
+
+    def test_both_emit_the_same_summary_sentence(self):
+        for name, text in (("Python", self.PYTHON), ("Java", self.JAVA)):
+            self.assertIn(self.SUMMARY, text, name + " 少了批量冲突的汇总句")
+
+    def test_both_spell_the_conflict_the_same_way(self):
+        for name, text in (("Python", self.PYTHON), ("Java", self.JAVA)):
+            self.assertIn(self.CLAIM, text, name)
+            self.assertIn(self.DEPENDENCY, text, name)
+            self.assertIn(self.NOT_WRITTEN, text, name)
+
+    def test_the_code_comes_first_on_both_sides(self):
+        self.assertIn('"CLI002: " + str(source) + ": 输出 "', self.PYTHON,
+                      "Python 批量冲突必须把 CLI002 放在最前")
+        self.assertIn('ERR.println("texel-compiler: CLI002: " + conflict)', self.JAVA,
+                      "Java 批量冲突必须把 CLI002 放在最前")
+
+
 if __name__ == "__main__":
     unittest.main()
