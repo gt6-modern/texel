@@ -72,6 +72,20 @@ def _write_stdout(text):
     sys.stdout.buffer.flush()
 
 
+def _probe_is_dir(path):
+    """`path` 是否是一个已存在的目录；探测本身失败时按"不是目录"回答。
+
+    Windows 上对超长路径（约 40000 字符的 `-o`）`os.stat` 抛的是 **ValueError**
+    （"path too long for Windows"），不是 OSError；`Path.is_dir()` 只吞 OSError，
+    于是异常直达顶层，CLI 漏出 traceback（审查 P2）。探测失败说明它不可能是目录，
+    交给写入侧报一行宿主 I/O 失败（退出码 4）。
+    """
+    try:
+        return path.is_dir()
+    except (OSError, ValueError):
+        return False
+
+
 def _safe_resolve(path):
     """解析路径；遇到符号链接环返回 None，调用方据此给单行 I/O 失败。
 
@@ -83,13 +97,13 @@ def _safe_resolve(path):
         os.stat(str(path))
     except FileNotFoundError:
         pass  # 产物还不存在是正常情况
-    except OSError:
+    except (OSError, ValueError):
         # ELOOP（环）等：stat 会跟随链接，环上内核必然报错，与解释器版本无关。
         # 不用 errno 常量：本仓库的独立性测试只允许白名单模块。
         return None
     try:
         return path.resolve()
-    except (OSError, RuntimeError):
+    except (OSError, RuntimeError, ValueError):
         return None
 
 
@@ -152,8 +166,8 @@ def _identity(path):
         return None
     try:
         info = os.stat(str(path))
-    except OSError:
-        # 还不存在的产物：路径身份就是"解析后的绝对路径"。
+    except (OSError, ValueError):
+        # 还不存在的产物（或宿主不认这个路径长度）：路径身份就是"解析后的绝对路径"。
         return ("path", str(resolved))
     return ("file", info.st_dev, info.st_ino)
 
@@ -304,7 +318,9 @@ def _run_target(args):
             # stdout 上了，而产物一个都没更新（2026-11-20 审查 P2）。
             sys.stdout.write(compiled.manifest_text())
             sys.stdout.flush()
-    except OSError as failure:
+    except (OSError, ValueError) as failure:
+        # ValueError 也接：Windows 对超长路径报的是 `ValueError: stat: path too long`，
+        # 它同样是"宿主不认这个路径"，不该漏成 traceback（审查 P2）。
         for temporary, _target in staged:
             _discard(temporary)
         _note("CLI003: I/O 失败: " + str(failure))
@@ -719,7 +735,7 @@ def _run_legacy(args):
     if output is not None:
         if not output:
             return _usage("输出路径不能为空")
-        if Path(output).is_dir():
+        if _probe_is_dir(Path(output)):
             return _usage("输出路径是一个目录: " + output)
     # 旧式入口同样要挡别名：-o entry.pxl 会把源文件静默写成 PNG（新式 compile/check 已有闸门，
     # 但两条入口是各自解析参数的，只保护新式分支等于没保护）。
@@ -769,10 +785,17 @@ def _run_legacy(args):
     for source, target in planned:
         parent = source.absolute().parent
         try:
-            manifest = pxlcompile.dependency_manifest(source.name, FileSystemResolver(parent))
-        except PxlError as failure:
-            broken[source] = str(source) + ": " + failure.describe()
+            manifest, failure = pxlcompile.best_effort_manifest(
+                source.name, FileSystemResolver(parent))
+        except OSError as error:
+            # 宿主读盘失败（依赖被锁定、无权限）：这是**逐文件失败**，不是用法错。
+            # 原来只接 PxlError，OSError 会落到顶层兜底并返回 2（审查 P2）。
+            broken[source] = str(source) + ": I/O 失败: " + str(error)
             continue
+        if failure is not None:
+            broken[source] = str(source) + ": " + failure.describe()
+        # **失败的入口也进清单**：它已经读到的素材不能被同批另一个入口的输出覆盖，
+        # 否则命令只是失败退出，素材却已经变了（审查 P1）。
         manifests.append((source, target, parent, manifest))
 
     # 每个输出都要对**所有**入口的依赖清单比一遍，然后整批拒绝——与"输出撞输入"同一类
@@ -792,12 +815,20 @@ def _run_legacy(args):
         _note("检测到 %d 处输出覆盖编译依赖，整批未写入任何文件" % len(conflicts))
         return EXIT_USAGE
 
+    if broken:
+        # 预扫失败的入口说明我们**不知道它的完整依赖集**：相位 A 在读 png 素材之前就会
+        # 失败（png 在相位 C 才真正读），所以"已经读到哪些文件"补不出那份清单。既然无法
+        # 证明这批输出不会毁掉它依赖的东西，就只能整批不写——一个入口坏了，不能让同批
+        # 另一个入口把它的素材改成 PNG（审查 P1）。
+        # 只报逐文件的诊断（每个失败入口一行），不加汇总行：本仓库的契约是"每条错误
+        # 恰好一行"，多一行汇总会让按行解析的调用方多出一条伪错误。
+        for source, _target in planned:
+            if source in broken:
+                _note(broken[source])
+        return EXIT_BATCH_FAILED
+
     failures = 0
     for source, target in planned:
-        if source in broken:
-            failures += 1
-            _note(broken[source])
-            continue
         try:
             # 旧式批量入口同样走**完整的 v1 编译管线**，asset root = 源文件所在目录。
             # 只在内存里渲染入口字节（api.render_document）拿不到 asset root，于是任何
@@ -811,7 +842,7 @@ def _run_legacy(args):
         except PxlError as failure:
             failures += 1
             _note(str(source) + ": " + failure.describe())
-        except OSError as failure:
+        except (OSError, ValueError) as failure:
             failures += 1
             _note(str(source) + ": I/O 失败: " + str(failure))
     return EXIT_OK if failures == 0 else EXIT_BATCH_FAILED

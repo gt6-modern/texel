@@ -924,6 +924,7 @@ public final class CliTestMain {
                     check(occurrences == 1, "错误码只能出现一次，实际 " + occurrences + " 次: " + text);
                 }
             });
+            batchDependencyConflicts();
         } finally {
             deleteTree(workspace);
         }
@@ -971,6 +972,50 @@ public final class CliTestMain {
         }
     }
 
+    /** 批量入口：输出落到**自己**（或别的入口）读过的依赖上时必须整批拒绝（审查 P1）。 */
+    private static void batchDependencyConflicts() {
+        run("v1-batch-output-must-not-overwrite-a-dependency", new Body() {
+            public void run() throws Exception {
+                Path root = Files.createTempDirectory(workspace, "v1batchdep");
+                Files.write(root.resolve("sprite.png"),
+                        io.github.texel.core.PngEncoder.encode(2, 2, new byte[2 * 2 * 4]));
+                Files.write(root.resolve("sprite.pxl"),
+                        v1EntryWithAsset("png", "sprite.png").getBytes(UTF8));
+                byte[] before = Files.readAllBytes(root.resolve("sprite.png"));
+                Result result = cli("-o", root.resolve("sprite.png").toString(),
+                        root.resolve("sprite.pxl").toString());
+                check(result.exit == 2, "输出覆盖依赖属于 CLI002（exit 2），实际 " + result.exit
+                        + " / " + result.stderr);
+                check(result.stderr.contains("CLI002"), "必须有 CLI002: " + result.stderr);
+                check(result.stderr.contains("整批未写入任何文件"), "必须有整批未写入的说明: " + result.stderr);
+                check(java.util.Arrays.equals(before, Files.readAllBytes(root.resolve("sprite.png"))),
+                        "被引用的素材不得被改写成编译产物");
+            }
+        });
+        run("v1-batch-failed-entry-blocks-every-write", new Body() {
+            public void run() throws Exception {
+                // 一个入口解析失败时，我们不知道它的完整依赖集（PNG 素材要到后面的阶段才读），
+                // 所以整批不写：否则同批另一个入口的输出会把它依赖的素材改成 PNG（审查 P1）。
+                Path root = Files.createTempDirectory(workspace, "v1batchfailed");
+                Files.write(root.resolve("sprite.png"),
+                        io.github.texel.core.PngEncoder.encode(2, 2, new byte[2 * 2 * 4]));
+                byte[] before = Files.readAllBytes(root.resolve("sprite.png"));
+                // entry.pxl 引用一个不存在的 pxl 素材（解析阶段就失败）
+                Files.write(root.resolve("entry.pxl"),
+                        v1EntryWithAsset("pxl", "parts/missing.pxl").getBytes(UTF8));
+                // sprite.pxl 是个**不引用任何素材**的普通文档，默认输出正是 sprite.png
+                Files.write(root.resolve("sprite.pxl"), simpleDocument().getBytes(UTF8));
+                Result result = cli(root.toString());
+                check(result.exit == 1, "解析失败是批处理失败（exit 1），实际 " + result.exit
+                        + " / " + result.stderr);
+                check(result.stderr.contains("PXL009"), "必须报出缺失依赖: " + result.stderr);
+                check(result.stderr.split("\n").length == 1, "每条错误恰好一行: " + result.stderr);
+                check(java.util.Arrays.equals(before, Files.readAllBytes(root.resolve("sprite.png"))),
+                        "素材不得被同批另一个入口改写");
+                check(!Files.exists(root.resolve("sprite.png.tmp")), "不得留下临时文件");
+            }
+        });
+    }
     private static String v1EntryWithAsset(String kind, String path) {
         return "{\"format\":\"PXL\",\"version\":1,\"width\":2,\"height\":2,"
                 + "\"encoding\":\"char\",\"palette\":[\"FFFFFFFF\"],"
@@ -989,6 +1034,14 @@ public final class CliTestMain {
         } finally {
             file.close();
         }
+    }
+
+    /** 一个不引用任何素材的最小文档（批量用例里当"健康入口"）。 */
+    private static String simpleDocument() {
+        return "{\"format\":\"PXL\",\"version\":1,\"width\":2,\"height\":2,"
+                + "\"encoding\":\"char\",\"palette\":[\"FFFFFFFF\"],"
+                + "\"layers\":[{\"name\":\"base\",\"blend\":\"normal\",\"ops\":"
+                + "[{\"op\":\"fill\",\"slot\":1}]}]}";
     }
 
     /** 一个最小 v1 入口：stamp 一个 PXL asset。 */

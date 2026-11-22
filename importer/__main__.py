@@ -359,7 +359,8 @@ def _probe_is_dir(path):
     """
     try:
         return path.is_dir()
-    except OSError:
+    except (OSError, ValueError):
+        # Windows 对超长路径抛 ValueError（"path too long"），不是 OSError。
         return False
 
 

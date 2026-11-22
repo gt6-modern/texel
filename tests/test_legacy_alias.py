@@ -52,6 +52,18 @@ PNG_ASSET_DOCUMENT = (
     '"ops":[{"op":"stamp","asset":"sprite","x":0,"y":0}]}]}'
 )
 
+#: 先 stamp `sprite.png`、随后因为缺 `missing.pxl` 失败：相位 A 在读 png 素材之前就炸，
+#: 所以失败入口"已经读过什么"补不出它对 `sprite.png` 的依赖。
+READ_THEN_FAIL_DOCUMENT = (
+    '{"format":"PXL","version":1,"encoding":"char","width":1,"height":1,'
+    '"palette":["FF0000FF"],'
+    '"assets":{"sprite":{"kind":"png","path":"sprite.png"},'
+    '"gone":{"kind":"pxl","path":"missing.pxl"}},'
+    '"layers":[{"name":"base","blend":"normal","ops":['
+    '{"op":"stamp","asset":"sprite","x":0,"y":0},'
+    '{"op":"stamp","asset":"gone","x":0,"y":0}]}]}'
+)
+
 
 def make_junction(link, target):
     """建一个指向目录的链接（Windows 用 junction，不需要管理员）。建不出来返回 False。"""
@@ -197,6 +209,82 @@ class LegacyBatchTest(unittest.TestCase):
                          "被引用的 PNG 素材不得被改写成编译产物")
         self.assertEqual([], sorted(p.name for p in case.glob("*.png") if p.name != "sprite.png"),
                          "整批拒绝时一个新产物都不许留下")
+
+    def test_failed_entry_blocks_the_whole_batch(self):
+        """预扫就失败的入口让整批不写：我们不知道它的完整依赖集。
+
+        相位 A 在读 PNG 素材之前就会因为缺 `missing.pxl` 失败，所以"失败入口已经读过
+        什么"补不出它对 `sprite.png` 的依赖。若照旧写同批的健康入口，`sprite.pxl` 的默认
+        输出 `sprite.png` 就会把那份素材改写成编译产物，而命令只是失败退出（审查 P1）。
+        """
+        case = BATCH / "failed"
+        case.mkdir(parents=True)
+        (case / "sprite.png").write_bytes(tiny_png())
+        (case / "entry.pxl").write_text(READ_THEN_FAIL_DOCUMENT, encoding="utf-8")
+        (case / "sprite.pxl").write_text(MINI_DOCUMENT, encoding="utf-8")
+        before = (case / "sprite.png").read_bytes()
+
+        stream = io.StringIO()
+        with redirect_stderr(stream):
+            code = cli_module.main([str(case)])
+
+        self.assertEqual(1, code, "解析失败属于批处理失败，不是用法错")
+        self.assertEqual(before, (case / "sprite.png").read_bytes(), "素材不得被改写成产物")
+        self.assertEqual([], sorted(p.name for p in case.glob("*.png") if p.name != "sprite.png"),
+                         "整批未写入时一个新产物都不许留下")
+        lines = stream.getvalue().splitlines()
+        self.assertEqual(1, len(lines), "每条错误恰好一行: %r" % (lines,))
+        self.assertIn("PXL009", lines[0])
+
+    def test_prescan_host_io_error_is_a_batch_failure(self):
+        """预扫里的宿主读盘失败（依赖被锁定）是逐文件失败，不是用法错。
+
+        只接 `PxlError` 时 `OSError` 会落到顶层兜底并返回 2（审查 P2）。
+        """
+        from texel_compiler import pxlcompile
+        from unittest import mock
+
+        case = BATCH / "prescan-io"
+        case.mkdir(parents=True)
+        (case / "entry.pxl").write_text(MINI_DOCUMENT, encoding="utf-8")
+
+        def locked(*arguments, **keywords):
+            raise PermissionError("locked")
+
+        stream = io.StringIO()
+        with mock.patch.object(pxlcompile, "best_effort_manifest", locked):
+            with redirect_stderr(stream):
+                code = cli_module.main([str(case)])
+        self.assertEqual(1, code, "宿主 I/O 失败应是批处理失败（exit 1）")
+        self.assertIn("I/O 失败", stream.getvalue())
+
+    def test_overlong_output_is_a_host_io_failure(self):
+        """Windows 上超长路径抛的是 `ValueError`，不该漏成 traceback。
+
+        `os.stat` 在 Windows 对约 40000 字符的路径报 `ValueError: path too long`；
+        `Path.is_dir()` 只吞 `OSError`，异常会直达顶层（审查 P2）。
+        """
+        from unittest import mock
+
+        case = BATCH / "overlong"
+        case.mkdir(parents=True)
+        (case / "entry.pxl").write_text(MINI_DOCUMENT, encoding="utf-8")
+        output = str(case / ("a" * 300 + ".png"))
+        real_stat = os.stat
+
+        def too_long(path, *arguments, **keywords):
+            if str(path).endswith("a" * 300 + ".png"):
+                raise ValueError("stat: path too long for Windows")
+            return real_stat(path, *arguments, **keywords)
+
+        stream = io.StringIO()
+        with mock.patch.object(os, "stat", too_long):
+            with redirect_stderr(stream):
+                code = cli_module.main(["-o", output, str(case / "entry.pxl")])
+        err = stream.getvalue()
+        self.assertEqual(4, code, err)
+        self.assertEqual(1, len(err.splitlines()), "必须恰好一行: %r" % err)
+        self.assertNotIn("Traceback", err)
 
     def test_empty_output_is_a_usage_error(self):
         """`-o ""` 曾被 `Path("")` 当成当前目录，然后整批失败 exit 1。"""

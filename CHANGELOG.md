@@ -211,7 +211,22 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
   pre-sized so the `add` after a rename cannot throw, and junction detection compares the parent's
   real path so a plain directory reached through a Windows 8.3 short name is not refused.
 - `docs/releasing.md`: the asset-set check is documented after the assembly step that actually
-  produces `dist/release` (the SBOM comes from CI), instead of before the builds.- `tools/check_release_metadata.py` reads `texel_compiler.__version__` too, so a bump that forgets
+  produces `dist/release` (the SBOM comes from CI), instead of before the builds.- A batch never writes anything when one of its entries cannot be parsed. An entry that failed in
+  the pre-scan has an incomplete dependency list (PNG assets are fetched after the PXL graph, so a
+  PXL failure happens before them), which means the batch cannot prove that another entry's default
+  output will not overwrite a file that entry depends on: `sprite.pxl` beside a failing `entry.pxl`
+  used to replace the `sprite.png` that `entry.pxl` stamps while the command merely reported the
+  parse error. Both compilers now refuse the whole batch, keep the per-file diagnostic (one line
+  each, no extra summary line) and exit 1.
+- The Java batch entry checks every output against every entry's dependency list, like the Python
+  one: `sprite.pxl` with `-o sprite.png` used to exit 0 and overwrite the PNG asset it stamps.
+  `PxlCompiler.dependencies(...)` exposes phase A (parse only, no rasterization), so the pre-scan
+  keeps no bitmaps and reports the dependencies an entry read before it failed.
+- A batch pre-scan that hits a host read error (a locked or unreadable dependency) is a per-file
+  I/O failure with exit 1 instead of falling through to the usage-error path and exiting 2.
+- A `ValueError` from the host is treated as I/O: Windows reports an overlong path as
+  `ValueError: stat: path too long for Windows`, which `Path.is_dir()` does not swallow and no
+  layer caught, so an overlong `-o` leaked a traceback instead of one `CLI003` line and exit 4.- `tools/check_release_metadata.py` reads `texel_compiler.__version__` too, so a bump that forgets
   the package's own `__version__` fails the gate instead of shipping a wheel whose metadata and
   runtime version disagree (#22). The bump checklist in `docs/releasing.md` names all seven files
   the gate reads, and no test hardcodes the version any more: `tests/test_capabilities.py` and

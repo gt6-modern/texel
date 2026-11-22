@@ -202,6 +202,31 @@ public final class Main {
             return 2;
         }
 
+        // 预检只看得见**输入**。输出还可能落在某个入口**读过的依赖**上（`-o sprite.png`
+        // 覆盖被 stamp 的素材），而依赖清单只有解析完才知道；逐个入口"编译完再判自己"时
+        // 前面的产物已经落盘。所以先做一次只解析不渲染的预扫，再整批判一次
+        // （审查 P1；与 Python 批量入口同一条判据）。
+        List<String> dependencyFailures = new ArrayList<String>();
+        List<String> dependencyConflicts = dependencyConflicts(sources, targets, dependencyFailures);
+        if (!dependencyConflicts.isEmpty()) {
+            for (String conflict : dependencyConflicts) {
+                ERR.println("texel-compiler: CLI002: " + conflict);
+            }
+            ERR.println("texel-compiler: 检测到 " + dependencyConflicts.size()
+                    + " 处输出覆盖编译依赖，整批未写入任何文件");
+            return 2;
+        }
+        if (!dependencyFailures.isEmpty()) {
+            // 预扫就把某个入口解析失败：我们不知道它的完整依赖集（PNG 素材要到渲染阶段
+            // 才真正读），无法证明这批输出不会毁掉它依赖的东西。一个入口坏了，不能让同批
+            // 另一个入口把它的素材改成 PNG（审查 P1；Python 侧同一条规则）。
+            // 只报逐文件的诊断（每个失败入口一行），不加汇总行：契约是"每条错误恰好一行"。
+            for (String failure : dependencyFailures) {
+                ERR.println("texel-compiler: " + failure);
+            }
+            return 1;
+        }
+
         int failures = 0;
         for (int index = 0; index < sources.size(); index++) {
             Path source = sources.get(index);
@@ -224,6 +249,65 @@ public final class Main {
             }
         }
         return failures == 0 ? 0 : 1;
+    }
+
+    /**
+     * 每个输出对**所有**入口的依赖清单做一次覆盖检查（审查 P1）。
+     *
+     * <p>预扫走 {@code PxlCompiler.dependencies}（只跑相位 A），所以这一步一份位图都不留。
+     * 解析失败的入口不在这里报（正式循环会逐文件报），但**它已经读到的依赖照样参与检查**：
+     * 那份素材同样不能被别的输出覆盖。
+     */
+    private static List<String> dependencyConflicts(List<Path> sources, List<Path> targets,
+            List<String> parseFailures) {
+        List<String> conflicts = new ArrayList<String>();
+        List<Path> roots = new ArrayList<Path>();
+        List<List<io.github.texel.core.PxlCompiler.Dependency>> manifests =
+                new ArrayList<List<io.github.texel.core.PxlCompiler.Dependency>>();
+        for (Path source : sources) {
+            Path root = source.toAbsolutePath().getParent();
+            List<io.github.texel.core.PxlCompiler.Dependency> partial =
+                    new ArrayList<io.github.texel.core.PxlCompiler.Dependency>();
+            roots.add(root);
+            manifests.add(partial);
+            if (root == null) {
+                continue;
+            }
+            try {
+                io.github.texel.core.PxlCompiler.dependencies(
+                        source.getFileName().toString(),
+                        io.github.texel.core.FileAssetResolver.rootedAt(root),
+                        java.util.Collections.<String, String>emptyMap(), partial);
+            } catch (PxlFormatException failure) {
+                // 消息本身已带 `PXL0xx: ` 前缀（PxlFormatException 的构造约定）。
+                parseFailures.add(escape(source.toString()) + ": " + escape(failure.getMessage()));
+            } catch (IOException failure) {
+                parseFailures.add(escape(source.toString()) + ": " + describe(failure));
+            } catch (RuntimeException failure) {
+                Throwable cause = failure.getCause() == null ? failure : failure.getCause();
+                parseFailures.add(escape(source.toString()) + ": CLI001: I/O 失败: "
+                        + escape(cause.toString()));
+            }
+        }
+        for (int index = 0; index < sources.size(); index++) {
+            Path target = targets.get(index);
+            for (int other = 0; other < sources.size(); other++) {
+                Path root = roots.get(other);
+                if (root == null) {
+                    continue;
+                }
+                String clash = io.github.texel.core.PxlCompiler.conflictingSource(
+                        target.toString(), root.toFile(), manifests.get(other));
+                if (clash != null) {
+                    conflicts.add(escape(sources.get(index).toString()) + ": 输出 "
+                            + escape(target.toString()) + " 会覆盖 "
+                            + escape(sources.get(other).toString()) + " 的编译依赖 "
+                            + escape(clash) + "（未写入）");
+                    break;
+                }
+            }
+        }
+        return conflicts;
     }
 
     private static void write(Path source, Path target) throws PxlFormatException, IOException {
