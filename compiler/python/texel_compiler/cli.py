@@ -613,24 +613,6 @@ def _write_bytes(target, payload):
         raise
 
 
-def _dependency_clash(root, compiled, target):
-    """``target`` 是否落在本次编译读过的某个依赖上；是则返回那条依赖的逻辑路径。
-
-    依赖清单给的是**逻辑路径**（相对 asset root），落盘位置就是 ``root / 逻辑路径``。
-    比较按"同一个文件"来判：路径相同或 inode 相同（硬链接）都算覆盖。
-    """
-    target_key = _safe_resolve(target)
-    target_ident = _identity(target)
-    for dependency in compiled.dependencies:
-        candidate = root / dependency.logical_path
-        if target_key is not None and _safe_resolve(candidate) == target_key:
-            return dependency.logical_path
-        ident = _identity(candidate)
-        if ident is not None and target_ident is not None and ident == target_ident:
-            return dependency.logical_path
-    return None
-
-
 def _run_legacy(args):
     inputs = []
     output = None
@@ -748,8 +730,10 @@ def _run_legacy(args):
             compiled = pxlcompile.compile_target(source.name, FileSystemResolver(parent), {})
             # 输出不得覆盖**本次编译读过的依赖**：`-o parts/blade.pxl` 会把被引用的子文档
             # 截断成 PNG，而预检只比较输出与输入、命令还会返回成功（CodeRabbit 复审）。
-            # 依赖清单是在编译之后才拿得到的，所以这一格只能在写之前逐个入口判。
-            clash = _dependency_clash(parent, compiled, target)
+            # 依赖清单是在编译之后才拿得到的，所以这一格只能在写之前逐个入口判；判据复用
+            # `compile` 路径那一个 `conflicting_source`（真实路径 + inode 双重比较），
+            # 不另写一套。
+            clash = pxlcompile.conflicting_source(target, parent, compiled.dependencies)
             if clash is not None:
                 failures += 1
                 _note(str(source) + ": CLI002: 输出会覆盖编译依赖 " + clash + "（未写入）: "
