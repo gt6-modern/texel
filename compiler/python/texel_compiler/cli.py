@@ -568,7 +568,11 @@ def _publish(staged):
         os.replace(str(staged[0][0]), str(staged[0][1]))
         return
     backups = {}
-    committed = []
+    # 容量按产物数预分配、按下标登记：`list.append` 在扩容时要分配内存，而这一步发生在
+    # 改名**之后**——那次分配一旦抛 MemoryError，刚改名的产物不会被回滚，旧内容的备份
+    # 还会被当成"没用上"删掉（CodeRabbit 复审）。下标赋值不分配，问题消失。
+    committed = [None] * len(staged)
+    committed_count = 0
     try:
         # PNG 先改名、清单后改名：万一回滚本身也失败，「新 PNG + 旧清单」是保守的一侧
         # （看到旧清单下游会重建），反过来「旧 PNG + 新清单」等于让构建系统相信一份
@@ -577,14 +581,23 @@ def _publish(staged):
             if target.is_symlink() or target.exists():
                 backups[target] = _backup_target(target, temporary.with_suffix(".prev"))
             os.replace(str(temporary), str(target))
-            committed.append(target)
+            # 只登记**真的改过名**的目标：否则回滚会去"恢复"一份根本没被替换的产物，
+            # 而恢复失败的原因往往和刚才那次失败相同（同一目标、同一处境），于是多出一条
+            # 误导性的「回滚失败，备份保留在…」。
+            #
+            # 登记必须**不分配内存**：容量按产物数预分配、按位下标写入（`_committed_slots`），
+            # 所以这条赋值不会像 `list.append` 那样在改名之后抛 MemoryError
+            # （CodeRabbit 复审）。
+            committed[committed_count] = target
+            committed_count += 1
     except BaseException:
         kept = []
         #: 本次新产物没能删掉的路径。删除失败以前被 `_discard` 静默吞掉，于是命令报
         #: "清单提交失败"、磁盘上却留着新 PNG，操作者无从知道（CodeRabbit 复审）。
         stray = []
         try:
-            for target in reversed(committed):
+            for index in range(committed_count - 1, -1, -1):
+                target = committed[index]
                 record = backups.pop(target, None)
                 try:
                     if record is None:

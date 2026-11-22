@@ -150,6 +150,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi-importer
     permissions:
+      contents: read      # job 级 permissions 会覆盖顶层声明：不给的话私有仓库里 checkout 起不来
       id-token: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -187,6 +188,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi-compiler
     permissions:
+      contents: read      # job 级 permissions 会覆盖顶层声明：不给的话私有仓库里 checkout 起不来
       id-token: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
