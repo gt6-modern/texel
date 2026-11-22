@@ -156,9 +156,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 - A fully offscreen `stamp` no longer copies the asset. Python built one slice per asset row
   before clipping, so a 2048x2048 asset stamped outside a 1x1 canvas copied 16 MiB per op while
   the budgeted clipped write area stayed 0; only the rows that can be written are sliced now (#18).
-- `-o` with a name longer than the filesystem allows is a one-line `写出失败` instead of a
-  traceback. The probe ran during argument parsing, before the guard that turns `OSError` into a
-  diagnostic, and `ENAMETOOLONG` escaped it (#26).
+- `-o` with a name longer than the filesystem allows is a one-line diagnostic with exit 1 -
+  `写出失败` when the failure surfaces at write time, `无法解析输入/输出路径` when it surfaces
+  while planning - instead of a traceback. The directory probe ran during argument parsing,
+  before the guard that turns `OSError` into a diagnostic, and `ENAMETOOLONG` escaped it (#26).
 - A POSIX file name that is not valid UTF-8 is imported instead of failing the batch: the sort key
   is `os.fsencode(...)`, the reversible form, instead of `str.encode("utf-8")` on a string that
   carries surrogates (#25). The Python compiler's batch entry had the same sort key and the same
@@ -188,8 +189,8 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
   entry's dependency list is known, before its artifact is written.
 - `tools/check_release_metadata.py` reads `texel_compiler.__version__` too, so a bump that forgets
   the package's own `__version__` fails the gate instead of shipping a wheel whose metadata and
-  runtime version disagree (#22). The bump checklist in `docs/releasing.md` lists all six version
-  surfaces, and no test hardcodes the version any more: `tests/test_capabilities.py` and
+  runtime version disagree (#22). The bump checklist in `docs/releasing.md` names all seven files
+  the gate reads, and no test hardcodes the version any more: `tests/test_capabilities.py` and
   `tests/test_public_release.py` derive the expected value from `VERSION` (#23).
 
 ### Changed

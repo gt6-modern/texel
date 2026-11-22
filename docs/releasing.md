@@ -81,20 +81,23 @@ See [GitHub settings](github-settings.md) for the complete configuration.
 
 ## 2. Bump the version
 
-Update all six version surfaces below, plus the CHANGELOG section.
-`python tools/check_release_metadata.py` reads every one of them and fails if any
-disagrees with `VERSION`:
+The same version appears in seven files. `python tools/check_release_metadata.py`
+reads every one of them and fails if any disagrees with `VERSION`:
 
-- `VERSION`
-- `pyproject.toml`, `compiler/python/pyproject.toml`
+- `VERSION` (the source of truth)
+- `pyproject.toml`
+- `compiler/python/pyproject.toml`
 - `compiler/python/texel_compiler/capabilities.py` (`COMPILER_VERSION`)
 - `compiler/python/texel_compiler/__init__.py` (`__version__`)
 - `compiler/java/cli/src/main/java/io/github/texel/cli/Capabilities.java`
 - `spec/conformance/capabilities/pxl-v1.json`
 
+Plus the `CHANGELOG.md` section, which the gate also requires.
+
 No test needs editing for a bump: `tests/test_capabilities.py` and
 `tests/test_public_release.py` derive the expected version from `VERSION`, and
-`tests/test_release_metadata.py` runs the gate itself.
+`tests/test_release_metadata.py` runs the gate itself — including a check that
+this list still names every file the gate reads.
 
 Add a `## [X.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md`; the GitHub Release body
 is generated from exactly that section, so it must be self-contained and readable

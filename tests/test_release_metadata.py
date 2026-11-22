@@ -94,6 +94,34 @@ class ReleaseMetadataGateTest(unittest.TestCase):
         with self.assertRaises(AssertionError):
             gate.check(self.tree)
 
+    def test_capability_fixture_is_read(self):
+        # fixture 不在 SURFACES 表里（它按 JSON 读），单独钉一次：只改它也必须变红。
+        self.override("spec/conformance/capabilities/pxl-v1.json",
+                      '{\n  "compiler_version": "0.1.0"\n}\n')
+        with self.assertRaises(AssertionError) as caught:
+            gate.check(self.tree)
+        self.assertIn("capability fixture", str(caught.exception))
+
+    def test_version_itself_is_the_reference(self):
+        # `VERSION` 是参照物：把它改掉，其余七处就都不同了，门禁必须红而不是自洽通过。
+        self.override("VERSION", "0.1.0\n")
+        with self.assertRaises(AssertionError) as caught:
+            gate.check(self.tree)
+        self.assertIn("release versions differ from 0.1.0", str(caught.exception))
+
+    def test_the_bump_checklist_names_every_file_the_gate_reads(self):
+        """`docs/releasing.md` 的升版清单必须点名门禁真正读的每一个文件。
+
+        这条挡的是"清单少写一个面"——#22 的病根就是清单与门禁各说一套。文件清单从
+        门禁自己的表里推导，所以新增一个发布面而忘了写文档会立刻变红。
+        """
+        read = [relative for _name, relative, _pattern in gate.SURFACES]
+        read += ["VERSION", "spec/conformance/capabilities/pxl-v1.json"]
+        text = (ROOT / "docs" / "releasing.md").read_text(encoding="utf-8")
+        missing = [relative for relative in read if relative not in text]
+        self.assertEqual([], missing, "docs/releasing.md 的升版清单漏了: " + repr(missing))
+        self.assertIn("seven files", text, "清单口径要与实际数量一致")
+
     def test_the_real_repository_passes(self):
         version = gate.check(ROOT)
         self.assertEqual((ROOT / "VERSION").read_text(encoding="ascii").strip(), version)
