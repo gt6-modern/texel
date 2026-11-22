@@ -810,6 +810,11 @@ def _run_legacy(args):
                                  + clash + "（未写入）")
                 break
     if conflicts:
+        # 先把解析失败的入口说出来：冲突是用法错（exit 2），但不能因此把一个"文件本身坏了"
+        # 的事实藏起来——使用者修完冲突再看下一轮，等于多跑一次。
+        for source, _target in planned:
+            if source in broken:
+                _note(broken[source])
         for message in conflicts:
             _note(message)
         _note("检测到 %d 处输出覆盖编译依赖，整批未写入任何文件" % len(conflicts))

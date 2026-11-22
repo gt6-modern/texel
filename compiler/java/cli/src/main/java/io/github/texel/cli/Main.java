@@ -209,6 +209,10 @@ public final class Main {
         List<String> dependencyFailures = new ArrayList<String>();
         List<String> dependencyConflicts = dependencyConflicts(sources, targets, dependencyFailures);
         if (!dependencyConflicts.isEmpty()) {
+            // 冲突是用法错（exit 2），但"某个入口本身坏了"这个事实不能被藏起来：先逐条报出来。
+            for (String failure : dependencyFailures) {
+                ERR.println("texel-compiler: " + failure);
+            }
             for (String conflict : dependencyConflicts) {
                 ERR.println("texel-compiler: CLI002: " + conflict);
             }

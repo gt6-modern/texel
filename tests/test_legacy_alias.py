@@ -236,6 +236,27 @@ class LegacyBatchTest(unittest.TestCase):
         self.assertEqual(1, len(lines), "每条错误恰好一行: %r" % (lines,))
         self.assertIn("PXL009", lines[0])
 
+    def test_conflict_and_failure_are_both_reported(self):
+        """同一批里既有冲突又有解析失败时，两条都要说出来。
+
+        冲突是用法错（exit 2），但"某个入口本身坏了"不该被它藏起来：否则使用者修完
+        冲突再跑一轮才发现还有一个坏文件（审查 P1 的邻居问题）。
+        """
+        case = BATCH / "both"
+        case.mkdir(parents=True)
+        (case / "sprite.png").write_bytes(tiny_png())
+        (case / "broken.pxl").write_text(READ_THEN_FAIL_DOCUMENT, encoding="utf-8")
+        (case / "sprite.pxl").write_text(PNG_ASSET_DOCUMENT, encoding="utf-8")
+
+        stream = io.StringIO()
+        with redirect_stderr(stream):
+            code = cli_module.main([str(case)])
+
+        err = stream.getvalue()
+        self.assertEqual(2, code, "有冲突时是用法错: %r" % err)
+        self.assertIn("missing.pxl", err, "解析失败必须报出来: %r" % err)
+        self.assertIn("CLI002", err, "冲突必须报出来: %r" % err)
+
     def test_prescan_host_io_error_is_a_batch_failure(self):
         """预扫里的宿主读盘失败（依赖被锁定）是逐文件失败，不是用法错。
 
