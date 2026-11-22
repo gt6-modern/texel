@@ -142,7 +142,12 @@ def _collect_png(root, into, skipped):
         for path in entries:
             name = path.name
             linked = _is_link_like(path)
-            if name.endswith(".png"):
+            # **先认目录**：名字叫 `assets.png` 的普通目录也是目录，必须继续往下走。
+            # 先按扩展名分支会把它报成"不是普通文件的候选"跳过，里面的 PNG 就再也不会
+            # 被导入，而整批还可能返回 0（CodeRabbit 复审）。
+            if not linked and path.is_dir():
+                pending.append(path)
+            elif name.endswith(".png"):
                 if not linked and path.is_file():
                     found.append(path)
                 elif skipped is not None:
@@ -152,8 +157,6 @@ def _collect_png(root, into, skipped):
             elif name.lower().endswith(".png"):
                 if skipped is not None:
                     skipped.append(str(path) + "（扩展名大小写不符，只认 .png）")
-            elif not linked and path.is_dir():
-                pending.append(path)
     into.extend(sorted(found, key=_sort_key))
 
 
@@ -164,9 +167,14 @@ def _sort_key(path):
     Python 把它们解码成 surrogate 字符交给我们,直接 ``encode("utf-8")`` 会抛
     ``UnicodeEncodeError`` —— 目录模式下这会让整批以 traceback 结束,显式传入同一路径时
     更是当场炸掉(审查 #25)。``fsencode`` 用的正是解释器解出这些名字时用的文件系统编码,
-    因此对原始字节名同样可逆、可排序。反斜杠先归一成 ``/``,跨平台才对得上。
+    因此对原始字节名同样可逆、可排序。只归一**本平台的分隔符**:POSIX 上反斜杠是合法
+    文件名字符,`a/b.png` 与 `a\b.png` 是两个文件,全局替换会让它们拿到同一个排序键
+    (CodeRabbit 复审)。
     """
-    return os.fsencode(str(path).replace("\\", "/"))
+    text = str(path)
+    if os.sep != "/":
+        text = text.replace(os.sep, "/")
+    return os.fsencode(text)
 
 
 #: 这些码点不是"控制字符",但 ``str.splitlines()`` 会把它们当换行——于是原样打印
@@ -405,7 +413,10 @@ def main(argv=None):
     # 审查 P2）。要求使用者给出真实路径，而不是悄悄跟随。
     for item in paths:
         entry = Path(item)
-        if entry.is_dir() and _is_link_like(entry):
+        # 探测本身失败（ENAMETOOLONG 之类）不是"是链接目录"，而是这次输入不可用：
+        # 直接 `entry.is_dir()` 会在 main 的兜底 try 之前抛出去，变成 traceback
+        # （CodeRabbit 复审）。探测失败按"不是目录"处理，交给规划阶段报一行诊断。
+        if _probe_is_dir(entry) and _is_link_like(entry):
             _note("%s: 输入目录是符号链接/junction，批量入口不跟随（请给出真实路径）"
                   % _show(entry))
             return 1

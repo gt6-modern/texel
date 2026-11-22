@@ -11,6 +11,21 @@ from tools.check_release_assets import (AssetVerificationError, local_assets,
 
 VERSION = '0.2.0'
 
+#: 发布契约承诺的九个资产名，**独立于被测的 `required_assets`** 写死一份：
+#: 否则 `required_assets` 自己漏掉一件时，夹具、逐项删除用例和期望值会一起缩水，
+#: 门禁照样全绿（CodeRabbit 复审）。
+CONTRACT = (
+    'SHA256SUMS',
+    'texel-0.2.0-central.zip',
+    'texel-0.2.0.spdx.json',
+    'texel-cli-0.2.0.tar.gz',
+    'texel-compiler-0.2.0.zip',
+    'texel_compiler-0.2.0-py3-none-any.whl',
+    'texel_compiler-0.2.0.tar.gz',
+    'texel_importer-0.2.0-py3-none-any.whl',
+    'texel_importer-0.2.0.tar.gz',
+)
+
 
 def write_release_set(root, version=VERSION):
     """Write the complete asset set `docs/releasing.md` promises.
@@ -136,7 +151,12 @@ class ReleaseContractTest(unittest.TestCase):
     def test_complete_set_passes(self):
         write_release_set(self.root)
         assets = require_release_set(self.root, VERSION)
-        self.assertEqual(sorted(required_assets(VERSION)), sorted(assets))
+        self.assertEqual(sorted(CONTRACT), sorted(assets),
+                         "契约清单必须逐字匹配（不从 required_assets 取期望值）")
+
+    def test_required_assets_matches_the_contract(self):
+        self.assertEqual(sorted(CONTRACT), sorted(required_assets(VERSION)),
+                         "固定资产集本身少一件也要红")
 
     def test_payload_only_directory_is_rejected(self):
         # The issue's reproduction: a stray payload.bin with a covering manifest.

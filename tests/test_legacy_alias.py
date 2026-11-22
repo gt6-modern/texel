@@ -7,6 +7,7 @@
 输出写到 tests/_tmp（本目录由测试自己创建并清理），不碰夹具本身。
 """
 
+import io
 import os
 import shutil
 import struct
@@ -14,6 +15,7 @@ import subprocess
 import sys
 import unittest
 import zlib
+from contextlib import redirect_stderr
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -214,15 +216,23 @@ class LegacyBatchTest(unittest.TestCase):
 
         递归里的剪枝只看子项：根是 junction 时整棵树都会走到链接目标上，"目录模式处理
         哪些文件"取决于本机链接（2026-11-20 审查 P2）。
+
+        目标目录里放一个**能独立编译**的入口（`MINI_DOCUMENT`，无素材），否则"没产出
+        z.png"也可能只是素材缺失导致的编译失败，这条用例就会因为错误的原因变绿
+        （CodeRabbit 复审）。
         """
         outside = BATCH / "outside"
         outside.mkdir()
-        shutil.copy(str(self.entry), str(outside / "z.pxl"))
+        (outside / "z.pxl").write_text(MINI_DOCUMENT, encoding="utf-8")
         if not make_junction(BATCH / "rootlink", outside):
             self.skipTest("本机无法创建 junction/目录符号链接")
-        code = cli_module.main([str(BATCH / "rootlink")])
+        stream, err = io.StringIO(), io.StringIO()
+        with redirect_stderr(err):
+            code = cli_module.main([str(BATCH / "rootlink")])
         self.assertNotEqual(0, code, "链接目录根必须被拒绝")
         self.assertFalse((outside / "z.png").exists(), "不得编译链接目标下的 .pxl")
+        self.assertIn("输入目录是符号链接/junction", err.getvalue(),
+                      "必须是「拒绝遍历链接」，不能是编译失败: %r" % err.getvalue())
 
     def test_batch_does_not_follow_a_junction(self):
         """junction 在 Windows 上不算 islink，`os.walk(followlinks=False)` 照样走进去。

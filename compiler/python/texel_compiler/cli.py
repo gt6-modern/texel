@@ -248,7 +248,9 @@ def _run_target(args):
         _note("CLI001: I/O 失败: " + str(failure))
         return EXIT_IO
     # 输出与清单指向同一路径时，先写出的清单会被 PNG 覆盖，命令还报成功（发布态复核 P2）。
-    if not check and output is not None and deps is not None:
+    if not check and output is not None and deps is not None and deps != "-":
+        # `--deps -` 是 stdout 哨兵，不是文件路径：把它当路径比较只会得出"输出=清单"
+        # 的假冲突（`-o - --deps -` 就会撞上），而 `-o` 的 `-` 是普通文件名。
         if _same_output(Path(output), Path(deps)):
             _note("CLI002: 输出与清单指向同一路径: " + output)
             return EXIT_USAGE
@@ -388,10 +390,14 @@ def _stage_bytes(target, payload, tag="out"):
 
 
 def _discard(temporary):
-    """删掉暂存文件；不存在或删不掉都不掩盖原始错误。"""
+    """删掉暂存文件/备份的**目录项**；已经不在了或删不掉都不掩盖原始错误。
+
+    不能先用 ``Path.exists()`` 判断：它跟随符号链接，指向已不存在目标的 ``.prev``
+    备份 ``exists()`` 是 False，于是这种备份永远清不掉，会在输出目录里越积越多
+    （CodeRabbit 复审）。直接 unlink，容忍"已经不在了"。
+    """
     try:
-        if temporary.exists():
-            temporary.unlink()
+        os.unlink(str(temporary))
     except OSError:
         pass
 
@@ -488,12 +494,29 @@ def _copy_stream(source, destination):
 
     不用 ``read_bytes()``：此刻内存里已经有新 PNG、清单和编译产物，再要一份和旧产物
     等大的连续内存没有意义（2026-11-20 审查 P2）。
+
+    两个细节都是回滚的正确性要求（CodeRabbit 复审）：
+
+    * **先开源再建备份**：源打不开（权限、句柄额度）时不该先创建一个待清理的备份，
+      更不该把已经拿到的写描述符漏在进程里；
+    * **复制保留旧产物的权限**：备份是"回滚后要顶替旧产物"的东西，权限降成 0600 就等于
+      回滚后别人读不到那张 PNG。保留不了权限就让发布在替换旧产物**之前**失败。
     """
-    handle = os.open(str(destination), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_BINARY
-                     if os.name == "nt" else os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    try:
-        with open(str(source), "rb") as reader:
-            with os.fdopen(handle, "wb") as writer:
+    with open(str(source), "rb") as reader:
+        mode = None
+        try:
+            mode = os.stat(str(source)).st_mode & 0o777
+        except OSError:
+            mode = None
+        handle = os.open(str(destination), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_BINARY
+                         if os.name == "nt" else os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        handed_over = False
+        try:
+            if mode is not None:
+                os.chmod(str(destination), mode)
+            writer = os.fdopen(handle, "wb")
+            handed_over = True
+            with writer:
                 while True:
                     chunk = reader.read(_COPY_CHUNK)
                     if not chunk:
@@ -501,9 +524,15 @@ def _copy_stream(source, destination):
                     writer.write(chunk)
                 writer.flush()
                 os.fsync(writer.fileno())
-    except BaseException:
-        _discard(destination)
-        raise
+        except BaseException:
+            if not handed_over:
+                # fdopen 还没接管这个描述符，必须自己关掉。
+                try:
+                    os.close(handle)
+                except OSError:
+                    pass
+            _discard(destination)
+            raise
 
 
 def _restore_target(kind, payload, target):
@@ -825,7 +854,13 @@ def _collect_pxl(root, into, skipped, failures=None):
         for path in entries:
             name = path.name
             linked = _is_link_like(path)
-            if name.endswith(".pxl"):
+            # **先认目录**：名字叫 `group.pxl` 的普通目录也是目录，必须继续往下走。
+            # 先按扩展名分支会把它当成"不是普通文件的候选"报成跳过，里面的
+            # `group.pxl/entry.pxl` 就再也不会被编译，而整批还可能返回 0
+            # （CodeRabbit 复审）。
+            if not linked and path.is_dir():
+                pending.append(path)
+            elif name.endswith(".pxl"):
                 if not linked and path.is_file():
                     found.append(path)
                 else:
@@ -834,8 +869,6 @@ def _collect_pxl(root, into, skipped, failures=None):
                     skipped.append(str(path) + reason)
             elif name.lower().endswith(".pxl"):
                 skipped.append(str(path) + "（扩展名大小写不符，只认 .pxl）")
-            elif not linked and path.is_dir():
-                pending.append(path)
     into.extend(sorted(found, key=_sort_key))
 
 
@@ -845,7 +878,13 @@ def _sort_key(path):
     # 解释器把这类名字解码成 surrogate 字符交给批量入口,直接按 UTF-8 编码会抛
     # `UnicodeEncodeError` 并以 traceback 结束(审查 #25)。`fsencode` 走的是解释器解码
     # 这些名字时用的文件系统编码,对原始字节名同样可逆、可排序。
-    return os.fsencode(str(path).replace("\\", "/"))
+    #
+    # 只归一**本平台的分隔符**:在 POSIX 上反斜杠是合法文件名字符,`a/b.pxl` 与
+    # `a\b.pxl` 是两个文件,全局替换会让它们拿到同一个排序键(CodeRabbit 复审)。
+    text = str(path)
+    if os.sep != "/":
+        text = text.replace(os.sep, "/")
+    return os.fsencode(text)
 
 
 def usage_text():

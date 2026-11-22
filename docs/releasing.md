@@ -110,9 +110,18 @@ Run the full verification from `AGENTS.md`, on Linux and Windows, plus:
 ```console
 python tools/release_notes.py                     # the body that will be published
 python tools/release_probes.py pypi --project texel-importer --version "$(cat VERSION)"
-python tools/check_release_assets.py dist/release --version "$(cat VERSION)"  # the fixed asset set
 python -m build --outdir dist/importer .
 python -m build --outdir dist/compiler compiler/python
+```
+
+`dist/release` is assembled by the workflow's "Assemble release assets" step, which
+also writes `SHA256SUMS`, and the SPDX SBOM comes from `anchore/sbom-action`; the
+asset-set gate (`tools/check_release_assets.py`, issue #19) runs there, after those
+steps and before anything irreversible. A local run of that gate therefore has to
+reproduce the same directory first, SBOM included — otherwise it is meant to fail:
+
+```console
+python tools/check_release_assets.py dist/release --version "$(cat VERSION)"
 ```
 
 Prove the signing key works before spending a CI round trip (this is the command

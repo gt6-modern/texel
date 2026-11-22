@@ -192,7 +192,26 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
   list, each output is compared against the union with `conflicting_source`, and a hit refuses
   the batch with `CLI002` before the first write. The pre-scan produces no bitmaps, so it never
   holds more than one artifact's worth of pixels.
-- `tools/check_release_metadata.py` reads `texel_compiler.__version__` too, so a bump that forgets
+- A dangling symbolic-link backup is now cleaned up. Cleanup asked `Path.exists()`, which follows
+  the link, so a `.prev` that pointed at a file that no longer existed was never removed and
+  accumulated in the output directory.
+- A copy backup keeps the old artifact's permissions, and the source file is opened before the
+  backup is created. Rolling back a `0644` PNG used to restore it as `0600`, and failing to open
+  the source after creating the backup leaked the write descriptor.
+- The batch sort key only normalises the **platform** separator: on POSIX a literal backslash is
+  part of the file name, so `a/b.pxl` and `a\b.pxl` used to collide on one key and lose the
+  deterministic order (both the compiler and the importer).
+- A directory whose name ends in `.pxl` (or `.png`) is traversed instead of being reported as a
+  skipped candidate: `group.pxl/entry.pxl` used to be dropped while the batch still exited 0.
+- The importer's link-root probe no longer raises for a name it cannot stat: an overlong input
+  path is a one-line diagnostic there too.
+- `-o - --deps -` is no longer a false `CLI002`: the stdout sentinel is not compared as a path.
+- Java: the stdout manifest for `--deps -` is serialised before the artifacts are published (an
+  `OutOfMemoryError` after the rename used to leave a new PNG and empty stdout), `committed` is
+  pre-sized so the `add` after a rename cannot throw, and junction detection compares the parent's
+  real path so a plain directory reached through a Windows 8.3 short name is not refused.
+- `docs/releasing.md`: the asset-set check is documented after the assembly step that actually
+  produces `dist/release` (the SBOM comes from CI), instead of before the builds.- `tools/check_release_metadata.py` reads `texel_compiler.__version__` too, so a bump that forgets
   the package's own `__version__` fails the gate instead of shipping a wheel whose metadata and
   runtime version disagree (#22). The bump checklist in `docs/releasing.md` names all seven files
   the gate reads, and no test hardcodes the version any more: `tests/test_capabilities.py` and

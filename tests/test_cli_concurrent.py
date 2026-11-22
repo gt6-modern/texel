@@ -29,6 +29,9 @@ ENTRY = (
 
 THREADS = 8
 
+#: 屏障等待上限（秒）：线程起不来时不能永久阻塞。
+_BARRIER_TIMEOUT = 30
+
 
 class ConcurrentCompileTest(unittest.TestCase):
 
@@ -47,7 +50,12 @@ class ConcurrentCompileTest(unittest.TestCase):
 
     def compile_one(self, index, start, results):
         output = self.work / ("out-%d.png" % index)
-        start.wait()                                  # 同时进入编译:让暂存窗口真的重叠
+        try:
+            start.wait(_BARRIER_TIMEOUT)              # 同时进入编译:让暂存窗口真的重叠
+        except threading.BrokenBarrierError as failure:
+            # 某个线程没起来/退出：记下来，别让非守护线程永久卡在屏障上。
+            results.append(failure)
+            return
         try:
             results.append(compiler_cli.main([
                 "compile", "entry.pxl",
@@ -80,8 +88,18 @@ class ConcurrentCompileTest(unittest.TestCase):
         start = threading.Barrier(THREADS)
         threads = [threading.Thread(target=self.compile_one, args=(index, start, results))
                    for index in range(THREADS)]
-        for thread in threads:
-            thread.start()
+        started = []
+        try:
+            for thread in threads:
+                thread.start()
+                started.append(thread)
+        except BaseException:
+            # 起不来就作废屏障，否则已经等在屏障上的线程永远不会被唤醒，非守护线程会把
+            # 测试进程一起拖住（CodeRabbit 复审）。
+            start.abort()
+            for thread in started:
+                thread.join(_BARRIER_TIMEOUT)
+            raise
         for thread in threads:
             thread.join()
 

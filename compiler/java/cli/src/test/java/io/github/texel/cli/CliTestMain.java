@@ -726,8 +726,11 @@ public final class CliTestMain {
                         handle.close();
                     }
                     if (!Files.exists(backup)) {
-                        // 该平台允许替换被打开的文件：恢复成功、备份被正常消耗，
-                        // 这条判据在本机无从验证。
+                        // 该平台允许替换被打开的文件：恢复成功、备份被正常消耗。
+                        // 但"备份消失"不等于"恢复成功"——目标必须真的回到旧内容，否则
+                        // 这正是本条要防的数据丢失（CodeRabbit 复审）。
+                        check(java.util.Arrays.equals(old, Files.readAllBytes(target)),
+                                "备份已被消耗时，目标必须已恢复成旧内容");
                         return;
                     }
                     check(kept.contains(backup), "恢复失败的备份必须报出来，实际: " + kept);

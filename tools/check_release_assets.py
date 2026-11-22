@@ -124,7 +124,8 @@ def verify_assets(directory, remote_assets):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('directory')
+    parser.add_argument('directory', nargs='?', default='dist/release',
+                        help='asset directory (default: dist/release)')
     parser.add_argument('assets_json', nargs='?',
                         help='remote asset metadata to cross-check; omit with --version')
     parser.add_argument('--version', default=None,

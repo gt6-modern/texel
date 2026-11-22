@@ -151,7 +151,18 @@ class SortKeyTest(unittest.TestCase):
     def test_sort_key_orders_by_file_system_bytes(self):
         from importer.__main__ import _sort_key
         self.assertLess(_sort_key("a.png"), _sort_key("b.png"))
-        self.assertEqual(b"a/b.png", _sort_key("a\\b.png"))
+
+    def test_sort_key_only_normalises_the_platform_separator(self):
+        """POSIX 上反斜杠是**普通文件名**字符：`a/b.png` 与 `a\\b.png` 是两个文件。
+
+        全局替换反斜杠会给它们同一个排序键，于是"显式排序"名存实亡（CodeRabbit 复审）。
+        """
+        from importer.__main__ import _sort_key
+        if os.name == "nt":
+            self.assertEqual(b"a/b.png", _sort_key("a\\b.png"), "Windows 上 `\\` 是分隔符")
+        else:
+            self.assertEqual(b"a\\b.png", _sort_key("a\\b.png"), "POSIX 上 `\\` 是名字的一部分")
+            self.assertNotEqual(_sort_key("a/b.png"), _sort_key("a\\b.png"))
 
     @POSIX_ONLY
     def test_sort_key_accepts_surrogate_names(self):

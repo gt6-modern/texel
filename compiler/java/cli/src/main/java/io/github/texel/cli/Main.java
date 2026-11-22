@@ -392,7 +392,10 @@ public final class Main {
         Path pngTemp = null;
         Path depsTemp = null;
         java.util.Map<Path, Backup> backups = new java.util.LinkedHashMap<Path, Backup>();
-        java.util.List<Path> committed = new ArrayList<Path>();
+        // 容量预先分配成 2：`committed.add` 发生**在改名之后**，扩容一旦抛 OutOfMemoryError，
+        // 回滚循环看不到刚改名的那份，而备份会被当成"没用上"删掉 —— 新产物留在目录里、
+        // 旧内容再也恢复不了（CodeRabbit 复审）。
+        java.util.List<Path> committed = new ArrayList<Path>(2);
         try {
             pngTemp = stageFile(pngTarget, png);
             if (depsTarget == null) {
@@ -748,16 +751,20 @@ public final class Main {
             return true;
         }
         try {
-            Path real = directory.toRealPath();
             // 先做**词法**归一：调用方可能给的是 `dir\..`、`dir\.\x` 这种带 `..`/`.` 的普通
             // 路径，而 toRealPath() 已经把词法段消解掉了。不归一的话，`compiler\java\..`
             // 会被当成 junction 拒掉（2026-11-20 审查 P2）。
             Path lexical = directory.toAbsolutePath().normalize();
             Path parent = lexical.getParent();
-            Path expected = parent == null
-                    ? lexical
-                    : parent.toRealPath().resolve(lexical.getFileName());
-            return !real.equals(expected);
+            if (parent == null) {
+                return false;      // 盘符根/文件系统根：没有父目录可比，交给遍历自己判
+            }
+            Path real = directory.toRealPath();
+            // 只比**父目录的实路径**。原来把 toRealPath() 与"父实路径 + 词法名字"相比：
+            // Windows 上 `C:\LONGDI~1` 这类 8.3 短名称会被 toRealPath() 展开成长名字，
+            // 两边于是不相等，普通目录被误判成 junction 并在批量入口被拒（CodeRabbit 复审）。
+            // junction 与符号链接的实路径都落在**别的目录**上，父目录仍然不同，所以判据不变强。
+            return !real.getParent().equals(parent.toRealPath());
         } catch (IOException unreadable) {
             // 读不出来就别在这里剪枝：交给 walkFileTree 自己报（否则整棵树会被静默丢掉）。
             return false;
@@ -1070,18 +1077,24 @@ public final class Main {
             Path targetFile = Paths.get(output).toAbsolutePath();
             Path depsFile = (deps == null || "-".equals(deps))
                     ? null : Paths.get(deps).toAbsolutePath();
+            // `--deps -` 的清单文本在**发布之前**就序列化好：发布成功后再临时分配字节和字符串，
+            // 一旦 OutOfMemoryError，PNG 已经被替换、stdout 却什么都没有，命令还报 CLI001
+            // （CodeRabbit 复审）。先备好文本，发布成功后再打出去。
+            String stdoutManifest = "-".equals(deps)
+                    ? new String(manifestBytes(compiled.dependencies()),
+                            java.nio.charset.Charset.forName("UTF-8"))
+                    : null;
             // 两份产物当成一次事务：都写进临时文件并刷盘之后才改名，改名失败整体回滚。
             int published = publish(targetFile, png, depsFile,
                     depsFile == null ? null : manifestBytes(compiled.dependencies()));
             if (published != 0) {
                 return published;
             }
-            if ("-".equals(deps)) {
+            if (stdoutManifest != null) {
                 // PRD 要求「依赖清单可写 stdout」；旗标本身 PRD 未规定，这里取约定的 '-'，
                 // 并且**不能**把 '-' 当成文件名写出去。放到产物改名之后才打：否则 PNG
                 // 写失败时清单已经在 stdout 上了，而产物一个都没更新。
-                OUT.print(new String(manifestBytes(compiled.dependencies()),
-                        java.nio.charset.Charset.forName("UTF-8")));
+                OUT.print(stdoutManifest);
                 OUT.flush();
             }
             return 0;
