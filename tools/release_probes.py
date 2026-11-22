@@ -23,11 +23,19 @@ import urllib.error
 import urllib.request
 
 PYPI_JSON = "https://pypi.org/pypi/{project}/{version}/json"
-CENTRAL_POM = ("https://repo1.maven.org/maven2/io/github/gt6-modern/{artifact}/"
-               "{version}/{artifact}-{version}.pom")
+#: Central 上 artifact 目录下的**某个文件**:`.../<artifact>/<version>/<name>`。
+CENTRAL_FILE = ("https://repo1.maven.org/maven2/io/github/gt6-modern/{artifact}/"
+                "{version}/{name}")
 
 #: Central 上必须**全部**存在才算发布完成(releasing.md 的发布契约)。
 CENTRAL_ARTIFACTS = ("texel-core", "texel-cli")
+
+#: 每个 artifact 都必须有的文件(名字模板)。只看 POM 会把"POM 上传了、主 JAR 没上传"
+#: 的半发布当成完成,工作流随后跳过上传,那个版本就永久缺件(审查 P1)。
+CENTRAL_FILES = (
+    ("POM", "{artifact}-{version}.pom"),
+    ("主 JAR", "{artifact}-{version}.jar"),
+)
 
 #: PyPI 上必须**两种**都存在:wheel 与 sdist。
 PYPI_KINDS = (("wheel", ".whl"), ("sdist", ".tar.gz"))
@@ -103,26 +111,31 @@ def pypi_state(project, version, kinds=PYPI_KINDS, fetch=None):
 
 
 def central_state(version, artifacts=CENTRAL_ARTIFACTS, fetch=None):
-    """按 POM 是否存在判断 Central 上的发布是否完整(每个 artifact 都要在)。"""
+    """Central 上的发布是否**完整**:每个 artifact 的 POM 与主 JAR 都要在。"""
     fetch = _resolved(fetch)
     present = []
     absent = []
     for artifact in artifacts:
-        url = CENTRAL_POM.format(artifact=artifact, version=version)
-        status, _body = fetch(url)
-        if status == 200:
-            present.append(artifact)
-        elif status == NOT_FOUND:
-            absent.append(artifact)
-        else:
-            raise ProbeError("Central 探测 %s 返回 HTTP %d" % (artifact, status))
+        for label, pattern in CENTRAL_FILES:
+            name = pattern.format(artifact=artifact, version=version)
+            url = CENTRAL_FILE.format(artifact=artifact, version=version, name=name)
+            status, _body = fetch(url)
+            item = "%s/%s" % (artifact, label)
+            if status == 200:
+                present.append(item)
+            elif status == NOT_FOUND:
+                absent.append(item)
+            else:
+                raise ProbeError("Central 探测 %s 的 %s 返回 HTTP %d"
+                                 % (artifact, label, status))
     if not absent:
-        return PUBLISHED, "Central 上 %s %s 齐全" % ("/".join(artifacts), version)
+        return PUBLISHED, ("Central 上 %s %s 齐全(POM+主 JAR)"
+                           % ("/".join(artifacts), version))
     if not present:
         return MISSING, "Central 上还没有 %s %s" % ("/".join(artifacts), version)
     raise ProbeError("%s %s 是**半发布**:已有 %s,缺 %s"
                      % ("/".join(artifacts), version,
-                        "/".join(present), "/".join(absent)))
+                        ", ".join(present), ", ".join(absent)))
 
 
 def main(argv=None):

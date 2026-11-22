@@ -603,12 +603,15 @@ def conflicting_source(candidate, asset_root, dependencies):
         return None
     try:
         target = Path(candidate).resolve()
-    except (OSError, RuntimeError):
+    except (OSError, RuntimeError, ValueError):
+        # ValueError = 宿主不接受这个路径（Windows 的 NUL、超长路径等）：不是"不冲突"，
+        # 而是"这条路径根本用不了"。返回 None 让写入阶段把它报成受控的 I/O 失败，
+        # 而不是在这里抛 traceback（审查 P2）。
         return None
     for item in dependencies:
         try:
             source = (Path(asset_root) / item.logical_path).resolve()
-        except (OSError, RuntimeError):
+        except (OSError, RuntimeError, ValueError):
             continue
         if target == source:
             return item.logical_path

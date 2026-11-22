@@ -992,6 +992,40 @@ public final class CliTestMain {
                         "被引用的素材不得被改写成编译产物");
             }
         });
+        run("v1-rollback-reports-artifact-it-cannot-delete", new Body() {
+            public void run() throws Exception {
+                // 目标原先不存在时，回滚就是删掉这份新产物；删不掉必须点名，
+                // 否则命令失败、磁盘上留着新 PNG 而调用者不知道（审查 P1）。
+                Path root = Files.createTempDirectory(workspace, "v1stray");
+                Path target = root.resolve("out.png");
+                Files.createDirectories(target);
+                Files.write(target.resolve("keep"), new byte[] {1});
+                java.util.List<Path> committed = new ArrayList<Path>();
+                committed.add(target);
+                java.util.Map<Path, Main.Backup> backups =
+                        new java.util.LinkedHashMap<Path, Main.Backup>();
+                java.util.List<Path> stray = new ArrayList<Path>();
+                java.util.List<Path> kept = Main.rollback(committed, backups, stray);
+                check(kept.isEmpty(), "没有备份可保留，实际: " + kept);
+                check(stray.size() == 1 && stray.get(0).equals(target),
+                        "删不掉的新产物必须记账，实际: " + stray);
+            }
+        });
+        run("v1-batch-oversized-entry-keeps-pxl002", new Body() {
+            public void run() throws Exception {
+                // 预扫的 best-effort 清单不能把"文档太大"改写成"清单缺少入口行"/CLI001（审查 P2）。
+                Path root = Files.createTempDirectory(workspace, "v1batchbig");
+                Path entry = root.resolve("entry.pxl");
+                createSparse(entry, io.github.texel.core.PxlParser.maxDocumentBytes() + 1L,
+                        "{}".getBytes(UTF8));
+                Result result = cli(root.toString());
+                check(result.exit != 0, "超大入口必须失败");
+                check(result.stderr.contains("PXL002"), "必须保留原始的 PXL002: " + result.stderr);
+                check(!result.stderr.contains("清单缺少入口行"),
+                        "不得把 PXL002 盖成清单错误: " + result.stderr);
+                check(!result.stderr.contains("CLI001"), "不得报成宿主 I/O: " + result.stderr);
+            }
+        });
         run("v1-batch-failed-entry-blocks-every-write", new Body() {
             public void run() throws Exception {
                 // 一个入口解析失败时，我们不知道它的完整依赖集（PNG 素材要到后面的阶段才读），

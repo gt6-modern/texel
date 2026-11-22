@@ -510,19 +510,23 @@ public final class Main {
             depsTemp = null;
             committed.add(depsTarget);
         } catch (IOException failure) {
-            java.util.List<Path> kept = rollback(committed, backups);
+            java.util.List<Path> stray = new ArrayList<Path>();
+            java.util.List<Path> kept = rollback(committed, backups, stray);
             deleteQuietly(pngTemp);
             deleteQuietly(depsTemp);
             ERR.println("texel-compiler: CLI003: I/O 失败: " + escape(failure.toString()));
             reportKeptBackups(kept);
+            reportStrays(stray);
             return 4;
         } catch (Error failure) {
             // OutOfMemoryError 这类 Error 不是 IOException：不在这里清理的话，失败的编译会在
             // 目录里留下 .texel-*.tmp，已经提交的那份也留成新内容（2026-11-20 审查 P2）。
-            java.util.List<Path> kept = rollback(committed, backups);
+            java.util.List<Path> stray = new ArrayList<Path>();
+            java.util.List<Path> kept = rollback(committed, backups, stray);
             deleteQuietly(pngTemp);
             deleteQuietly(depsTemp);
             reportKeptBackups(kept);
+            reportStrays(stray);
             throw failure;
         }
         for (Backup backup : backups.values()) {
@@ -538,13 +542,31 @@ public final class Main {
      */
     static java.util.List<Path> rollback(java.util.List<Path> committed,
             java.util.Map<Path, Backup> backups) {
+        return rollback(committed, backups, new ArrayList<Path>());
+    }
+
+    /**
+     * 同上，并把"本次新建、却删不掉的产物"记进 {@code stray}。
+     *
+     * <p>原来这一格走 {@code deleteQuietly}，把删除失败全吞了：命令返回失败，磁盘上却留着
+     * 新 PNG，而 {@code kept} 里没有它、stderr 也不提（审查 P1）。只容忍"已经不在了"。
+     */
+    static java.util.List<Path> rollback(java.util.List<Path> committed,
+            java.util.Map<Path, Backup> backups, java.util.List<Path> stray) {
         java.util.List<Path> kept = new ArrayList<Path>();
         for (int index = committed.size() - 1; index >= 0; index--) {
             Path target = committed.get(index);
             Backup backup = backups.remove(target);
             try {
                 if (backup == null) {
-                    deleteQuietly(target);
+                    // 目标原先不存在：回滚就是删掉这份新产物。
+                    try {
+                        Files.delete(target);
+                    } catch (java.nio.file.NoSuchFileException gone) {
+                        // 已经不在了：正是想要的结果。
+                    } catch (IOException | Error stuck) {
+                        stray.add(target);
+                    }
                 } else {
                     restoreTarget(target, backup);
                 }
@@ -651,6 +673,14 @@ public final class Main {
     private static void reportKeptBackups(java.util.List<Path> kept) {
         for (Path path : kept) {
             ERR.println("texel-compiler: 回滚失败，旧产物备份保留在: " + escape(path.toString()));
+        }
+    }
+
+    /** 本次新建、却没能删掉的产物：必须点名，否则操作者以为失败后目录是干净的（审查 P1）。 */
+    private static void reportStrays(java.util.List<Path> stray) {
+        for (Path path : stray) {
+            ERR.println("texel-compiler: 回滚未能删除本次新产物（它仍留在磁盘上）: "
+                    + escape(path.toString()));
         }
     }
 

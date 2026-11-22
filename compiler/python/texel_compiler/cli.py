@@ -50,6 +50,11 @@ def main(argv=None):
         # 受控错误：泄漏 traceback 是确证问题（发布态复核第二节）。
         _note("宿主 I/O 失败: " + str(failure))
         return EXIT_USAGE
+    except ValueError as failure:
+        # 宿主不接受的路径（NUL、超长、非法字符）在 CPython 里报的是 ValueError 而不是
+        # OSError；漏出去就是一条 traceback（审查 P2）。这是路径/宿主问题，按 I/O 失败。
+        _note("CLI003: I/O 失败: 非法路径: " + str(failure))
+        return EXIT_IO
 
 
 def _main(argv=None):
@@ -354,10 +359,10 @@ def _symlink_cycle(target):
         try:
             probe.resolve(strict=True)
             return False
-        except OSError as failure:
+        except (OSError, ValueError) as failure:
             # Windows 3.8/3.9/3.14 把循环链接报告为 errno=22、winerror=1921；
             # 不能只识别 POSIX ELOOP，否则会继续到父目录并允许替换链接。
-            if failure.errno == _ELOOP or getattr(failure, "winerror", None) == 1921:
+            if getattr(failure, "errno", None) == _ELOOP or getattr(failure, "winerror", None) == 1921:
                 return True
             if probe == probe.parent:
                 return False
@@ -699,8 +704,16 @@ def _run_legacy(args):
         return _usage("缺少输入路径")
     sources = []
     for item in inputs:
-        path = Path(item)
-        if path.is_dir():
+        try:
+            path = Path(item)
+            is_directory = path.is_dir()
+        except (OSError, ValueError) as failure:
+            # 宿主不接受这个路径（Windows 的 NUL/超长名）：逐文件级别的宿主失败，
+            # 不是用法错。直接调 `is_dir()` 时它会一路抛到顶层，被映射成 EXIT_USAGE(2)
+            # 或者干脆漏出 traceback（审查 P2）。
+            _note(item + ": I/O 失败: 无法访问输入路径: " + str(failure))
+            return EXIT_BATCH_FAILED
+        if is_directory:
             # 输入**根**本身是链接目录时也要挡：递归里的剪枝只看子项，根是 junction 时
             # 整棵树都会走到链接目标上去，"目录模式处理哪些文件"取决于本机链接
             # （2026-11-20 审查 P2）。要求使用者给出真实路径。

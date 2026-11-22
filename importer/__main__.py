@@ -217,7 +217,7 @@ def _same_file(left, right):
     """
     try:
         return left.samefile(right)
-    except (OSError, RuntimeError):
+    except (OSError, RuntimeError, ValueError):
         pass
     try:
         return left.resolve() == right.resolve()
@@ -440,7 +440,9 @@ def main(argv=None):
         # 冲突必须在**任何写入之前**判完:否则"先写的那份"已经把后面的输入毁了,
         # 而后面的失败又会让整批看起来只是"某个文件读取失败"。
         conflicts = _write_conflicts(plan)
-    except (OSError, RuntimeError, UnicodeError) as error:
+    except (OSError, RuntimeError, UnicodeError, ValueError) as error:
+        # ValueError = 宿主不接受这个路径（NUL、超长名）：同样是"这条路径用不了"，
+        # 不是 traceback 的理由（审查 P2）。
         _note("无法解析输入/输出路径: %s" % error)
         return 1
     if conflicts:

@@ -69,6 +69,7 @@ public final class PxlCompiler {
      * @param partial          非 null 时（成功或失败都）填入本次读到的依赖
      * @return 依赖清单；解析失败时抛出异常（但 {@code partial} 已被填好）
      */
+
     public static List<Dependency> dependencies(String entryLogicalPath, AssetResolver resolver,
             Map<String, String> bindings, List<Dependency> partial) throws PxlFormatException {
         if (entryLogicalPath == null || resolver == null) {
@@ -79,14 +80,10 @@ public final class PxlCompiler {
             session.loadGraph(entryLogicalPath, true,
                     bindings == null ? java.util.Collections.<String, String>emptyMap() : bindings);
         } catch (PxlFormatException failure) {
-            if (partial != null) {
-                partial.addAll(session.manifest());
-            }
+            collectPartial(session, partial);
             throw failure;
         } catch (RuntimeException failure) {
-            if (partial != null) {
-                partial.addAll(session.manifest());
-            }
+            collectPartial(session, partial);
             throw failure;
         }
         List<Dependency> manifest = session.manifest();
@@ -95,7 +92,24 @@ public final class PxlCompiler {
         }
         return manifest;
     }
-
+    /**
+     * 失败时尽力交回"已经读到"的清单。
+     *
+     * <p>{@code manifest()} 要求入口行已经记账；入口本身就是失败原因时（例如超过 64 MiB，
+     * {@code PXL002} 在 {@code recordFile} 之前抛出）它自己还会抛
+     * {@code IllegalStateException}，那会把**原始的** PXL 错误盖成 CLI001（审查 P2）。
+     * 所以这里吞掉清单侧的失败：没有部分清单可以接受，丢掉原始诊断不行。
+     */
+    private static void collectPartial(Session session, List<Dependency> partial) {
+        if (partial == null) {
+            return;
+        }
+        try {
+            partial.addAll(session.manifest());
+        } catch (RuntimeException ignored) {
+            // 入口行没记上：没有部分清单可用。原始异常由调用方继续抛出。
+        }
+    }
     /**
      * 编译一个入口。
      *

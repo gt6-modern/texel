@@ -237,8 +237,9 @@ jobs:
           # 那样重跑就永远绿不了。这里先问 repo1（公开、不需要凭据），已存在就跳过上传。
           #
           # 判据在 tools/release_probes.py：只有 404 算未发布；200 还要求 texel-core 与
-          # texel-cli **两个** artifact 都在（只探 core 会把"core 在、cli 不在"的半发布当成
-          # 完成 —— 审查 #20）；其它状态一律让 job 红（审查 #21）。
+          # texel-cli **两个** artifact 的 **POM 与主 JAR** 都在（只探 core 会把"core 在、
+          # cli 不在"当成完成 —— 审查 #20；只看 POM 会把"POM 传了、JAR 没传"当成完成）；
+          # 其它状态一律让 job 红（审查 #21）。
           bundle=$(find dist -name '*-central.zip' -print -quit)
           test -n "$bundle"
           version=$(basename "$bundle" | sed -e 's/^texel-//' -e 's/-central\.zip$//')

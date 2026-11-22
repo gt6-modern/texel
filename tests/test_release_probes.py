@@ -135,6 +135,24 @@ class CentralProbeTest(unittest.TestCase):
             VERSION, fetch=self.both((404, b""), (404, b"")))
         self.assertEqual(probes.MISSING, state)
 
+    def test_missing_main_jar_is_a_partial_publication(self):
+        """POM 全在、主 JAR 缺一个，也是半发布：只看 POM 会跳过上传，版本永久缺件。"""
+        def fetch(url):
+            return (404, b"") if ".jar" in url else (200, b"<pom/>")
+
+        with self.assertRaises(probes.ProbeError) as caught:
+            probes.central_state(VERSION, fetch=fetch)
+        detail = str(caught.exception)
+        self.assertIn("半发布", detail)
+        self.assertIn("主 JAR", detail)
+
+    def test_every_artifact_needs_both_files(self):
+        def fetch(url):
+            return (200, b"<x/>")
+
+        state, _detail = probes.central_state(VERSION, fetch=fetch)
+        self.assertEqual(probes.PUBLISHED, state)
+
     def test_partial_publication_is_a_failure(self):
         # 审查 #20 的原始复现:texel-core 的 POM 200,texel-cli 的 POM 404。
         with self.assertRaises(probes.ProbeError) as caught:
