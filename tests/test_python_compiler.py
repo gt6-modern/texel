@@ -1596,6 +1596,63 @@ class PublishTransactionTest(unittest.TestCase):
             self.assertEqual([], sorted(directory.glob(".texel-*")),
                              "任何失败路径都不许把暂存文件留在目录里")
 
+    def test_a_stale_backup_is_never_deleted(self):
+        """回归：备份名撞车时，不能删掉上一次失败留下的 `.prev`。
+
+        那份 `.prev` 可能是旧产物的**唯一副本**（上一轮"提交失败 + 恢复失败"就靠它保命）。
+         backups 名以前是固定的，`os.symlink` 因 EEXIST 失败后 `_discard(backup)` 会把别人的
+        备份删掉（CodeRabbit 复审）。现在撞名只换下一个候选名。
+        """
+        with workspace() as directory:
+            target = directory / "out.png"
+            target.write_bytes(b"OLD-PNG")
+            base = directory / "out.png.prev"
+            base.write_bytes(b"STALE-BACKUP")
+            kind, payload = compiler_cli._backup_target(target, base)
+            try:
+                self.assertEqual(b"STALE-BACKUP", base.read_bytes(),
+                                 "既有的备份不得被删除或覆盖")
+                self.assertNotEqual(str(base), str(payload), "撞名时必须换一个候选名")
+                self.assertEqual(b"OLD-PNG", payload.read_bytes(), "新备份必须是旧产物")
+            finally:
+                compiler_cli._drop_backup(kind, payload)
+
+    def test_unrecoverable_new_artifact_is_reported(self):
+        """回归：删不掉"本次新建的产物"时，必须把它说出来。
+
+        目标原来不存在 → 回滚就是删掉它；删除失败以前被 `_discard` 静默吞掉，于是命令报
+        "清单提交失败"、磁盘上却留着新 PNG，操作者无从知道（CodeRabbit 复审）。
+        """
+        with workspace() as directory:
+            self._entry(directory)
+            png = directory / "out.png"
+            manifest = directory / "deps.tsv"
+            manifest.write_bytes(b"OLD-MANIFEST")
+            original_replace, original_unlink = os.replace, os.unlink
+
+            def failing_replace(source, destination):
+                if os.path.abspath(str(destination)) == os.path.abspath(str(manifest)):
+                    raise OSError("注入：清单提交失败")
+                return original_replace(source, destination)
+
+            def failing_unlink(path, *arguments, **keywords):
+                if os.path.abspath(str(path)) == os.path.abspath(str(png)):
+                    raise PermissionError("注入：删不掉新产物")
+                return original_unlink(path, *arguments, **keywords)
+
+            stream = io.StringIO()
+            with mock.patch.object(os, "replace", failing_replace):
+                with mock.patch.object(os, "unlink", failing_unlink):
+                    with contextlib.redirect_stderr(stream):
+                        code = compiler_cli.main(["compile", "entry.pxl",
+                                                  "--asset-root", str(directory),
+                                                  "-o", str(png), "--deps", str(manifest)])
+            err = stream.getvalue()
+            self.assertEqual(4, code, err)
+            self.assertIn("回滚未能删除本次新产物", err, err)
+            self.assertIn(str(png), err, "要点名留在磁盘上的路径")
+            self.assertEqual(b"OLD-MANIFEST", manifest.read_bytes(), "旧清单必须原样")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -175,6 +175,17 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
   a release (#19). `tools/check_release_assets.py` gained `require_release_set`, enforced by the
   build job before any artifact is uploaded and again by `tools/release_state.py` before the
   Release page is created or modified.
+- A rollback never deletes a backup it did not create. Backup names are now
+  allocated exclusively (`.prev`, `.prev.1`, …): a `.prev` left behind by an earlier
+  "commit failed, restore failed" run may be the only copy of the old artifact, and
+  creating the backup failing used to delete it.
+- A rollback that cannot delete the artifact this run created now says so, naming the
+  path it left on disk. Failure to unlink was swallowed, so the command reported only
+  the manifest failure while a new PNG stayed behind.
+- The batch entry refuses an output that would overwrite a dependency it just compiled:
+  `-o parts/blade.pxl` used to truncate the referenced sub-document into a PNG and
+  still exit 0. The pre-flight can only see the inputs, so this is checked once each
+  entry's dependency list is known, before its artifact is written.
 - `tools/check_release_metadata.py` reads `texel_compiler.__version__` too, so a bump that forgets
   the package's own `__version__` fails the gate instead of shipping a wheel whose metadata and
   runtime version disagree (#22). The bump checklist in `docs/releasing.md` lists all six version

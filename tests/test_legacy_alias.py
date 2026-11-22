@@ -136,6 +136,19 @@ class LegacyBatchTest(unittest.TestCase):
         code = cli_module.main(["-o", str(self.entry.parent), str(self.entry)])
         self.assertEqual(2, code, "输出路径是目录属于用法错，不是某个文件处理失败")
 
+    def test_output_must_not_overwrite_a_compiled_dependency(self):
+        """`-o parts/blade.pxl` 会把被引用的子文档截断成 PNG —— 必须在写之前拒绝。
+
+        批量预检只知道**输入**，而依赖要编译完才拿得到；所以这一格在写之前按本次编译的
+        依赖清单再判一次。原来没有这一格：命令成功、依赖文件被就地替换（CodeRabbit 复审）。
+        """
+        dependency = self.entry.parent / "parts" / "blade.pxl"
+        before = dependency.read_bytes()
+        code = cli_module.main(["-o", str(dependency), str(self.entry)])
+        self.assertNotEqual(0, code, "覆盖依赖必须失败")
+        self.assertEqual(before, dependency.read_bytes(), "依赖不得被截断成 PNG")
+        self.assertFalse((self.entry.parent / "entry.png").exists(), "被拒的批次不得产出其它产物")
+
     def test_empty_output_is_a_usage_error(self):
         """`-o ""` 曾被 `Path("")` 当成当前目录，然后整批失败 exit 1。"""
         code = cli_module.main(["-o", "", str(self.entry)])

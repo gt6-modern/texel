@@ -105,6 +105,11 @@ class ReleaseAssetTest(unittest.TestCase):
             local_assets(self.root)
 
 
+#: 合成目录按本仓库惯例建在 `tests/_tmp/` 下：本机沙箱里 `tempfile` 造出来的目录
+#: 既写不进也删不掉（`tests/test_python_compiler.py` 的 workspace() 有同样的注记）。
+WORK = Path(__file__).resolve().parent / '_tmp' / 'release-assets'
+
+
 class ReleaseContractTest(unittest.TestCase):
     """`require_release_set`：发布契约的固定资产集(审查 #19)。
 
@@ -114,9 +119,14 @@ class ReleaseContractTest(unittest.TestCase):
     """
 
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        import shutil
+        self.root = WORK / self._testMethodName.replace('test_', '')
+        shutil.rmtree(str(self.root), ignore_errors=True)
+        self.root.mkdir(parents=True)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(str(self.root), ignore_errors=True)
 
     def assert_rejected(self, fragment):
         with self.assertRaises(AssetVerificationError) as caught:

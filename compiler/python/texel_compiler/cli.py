@@ -405,7 +405,21 @@ _BACKUP_SYMLINK = "symlink"
 _COPY_CHUNK = 1 << 20
 
 
-def _backup_target(target, backup):
+def _backup_candidates(base):
+    """备份名的候选序列：先 ``base``，再 ``base.1``、``base.2``……
+
+    **绝不复用已存在的名字**：上次回滚失败时留下的 ``.prev`` 可能是旧产物的唯一副本，
+    而创建备份失败后去"清理"一个自己没建出来的文件就会把它删掉。所以撞名只换下一个
+    候选，不删除、不覆盖（CodeRabbit 复审）。
+    """
+    yield base
+    index = 1
+    while True:
+        yield base.with_name(base.name + "." + str(index))
+        index += 1
+
+
+def _backup_target(target, base):
     """给既有产物建一份**保身份**的备份，返回 ``(kind, payload)``。
 
     内容备份只能恢复字节，恢复不了目录项：目标原本是符号链接或硬链接时，回滚会把链接
@@ -418,38 +432,55 @@ def _backup_target(target, backup):
       身份丢了——但 ``st_nlink == 1`` 说明没有别处还指着这个 inode，丢的只是 inode 号；
     * **硬链接不可用且目标还有别的名字**（``st_nlink > 1``）：**让这次发布失败**。复制出来的
       备份回滚后是新 inode，那些名字之间的链接关系会永久丢掉，而失败的命令不该改变文件系统。
+
+    每个候选名都独占创建（``EXCL`` 语义），撞名就换下一个候选（见 ``_backup_candidates``）。
     """
     if target.is_symlink():
         # 备份必须是**磁盘上的对象**。只把 readlink 的文本记在内存里是不够的：回滚要先
         # 删掉目标再重建链接，重建一旦失败（权限、链接数上限）目标路径就没了，而那份
         # "备份"只活在进程里，谁也拿不回来（2026-11-20 审查 P1）。所以备份就是另一个
         # 指向同一目标的符号链接，回滚是一次原子改名。
+        for backup in _backup_candidates(base):
+            try:
+                os.symlink(os.readlink(str(target)), str(backup),
+                           target_is_directory=target.is_dir())
+            except FileExistsError:
+                continue          # 名字被占：换下一个，**不删别人的备份**
+            except (OSError, NotImplementedError) as failure:
+                # 没建出任何东西，无需清理（清理反而可能删掉别人的文件）。
+                raise OSError("无法为符号链接产物建立备份（建立链接失败: " + str(failure)
+                              + "）: " + str(target))
+            return (_BACKUP_SYMLINK, backup)
+        raise AssertionError("备份候选名用尽")  # pragma: no cover - 序列无穷
+    link_failure = None
+    for backup in _backup_candidates(base):
         try:
-            os.symlink(os.readlink(str(target)), str(backup),
-                       target_is_directory=target.is_dir())
+            os.link(str(target), str(backup))
+            return (_BACKUP_LINK, backup)
+        except FileExistsError:
+            continue              # 同上：撞名不覆盖
         except (OSError, NotImplementedError) as failure:
-            _discard(backup)
-            raise OSError("无法为符号链接产物建立备份（建立链接失败: " + str(failure)
-                          + "）: " + str(target))
-        return (_BACKUP_SYMLINK, backup)
+            link_failure = failure
+            break
+    # 把"文件系统不支持硬链接"和"权限/配额/链接数上限"分开：后者发生时目标很可能还与
+    # 别的名字共享 inode，复制备份等于承诺一份恢复不了的路径。nlink 是唯一能证明"没别的
+    # 名字"的依据，拿不到就按"有别的名字"处理。
+    links = 0
     try:
-        os.link(str(target), str(backup))
-        return (_BACKUP_LINK, backup)
-    except (OSError, NotImplementedError) as failure:
-        # 把"文件系统不支持硬链接"和"权限/配额/链接数上限"分开：后者发生时目标很可能还与
-        # 别的名字共享 inode，复制备份等于承诺一份恢复不了的路径。nlink 是唯一能证明"没别的
-        # 名字"的依据，拿不到就按"有别的名字"处理。
+        links = os.lstat(str(target)).st_nlink
+    except (OSError, AttributeError):
         links = 0
+    if links != 1:
+        raise OSError("无法为有硬链接的产物建立保身份备份（nlink=" + str(links)
+                      + "，与其它路径共享 inode）: " + str(target)
+                      + "（建硬链接失败: " + str(link_failure) + "）")
+    for backup in _backup_candidates(base):
         try:
-            links = os.lstat(str(target)).st_nlink
-        except (OSError, AttributeError):
-            links = 0
-        if links != 1:
-            raise OSError("无法为有硬链接的产物建立保身份备份（nlink=" + str(links)
-                          + "，与其它路径共享 inode）: " + str(target)
-                          + "（建硬链接失败: " + str(failure) + "）")
-    _copy_stream(target, backup)
-    return (_BACKUP_COPY, backup)
+            _copy_stream(target, backup)      # O_EXCL：撞名抛 FileExistsError
+        except FileExistsError:
+            continue
+        return (_BACKUP_COPY, backup)
+    raise AssertionError("备份候选名用尽")  # pragma: no cover - 序列无穷
 
 
 def _copy_stream(source, destination):
@@ -520,12 +551,22 @@ def _publish(staged):
             committed.append(target)
     except BaseException:
         kept = []
+        #: 本次新产物没能删掉的路径。删除失败以前被 `_discard` 静默吞掉，于是命令报
+        #: "清单提交失败"、磁盘上却留着新 PNG，操作者无从知道（CodeRabbit 复审）。
+        stray = []
         try:
             for target in reversed(committed):
                 record = backups.pop(target, None)
                 try:
                     if record is None:
-                        _discard(target)
+                        # 这个目标原来不存在：回滚就是删掉它。只容忍"已经不在了"，
+                        # 其它错误（权限、占用）必须记账并继续处理剩下的目标。
+                        try:
+                            os.unlink(str(target))
+                        except FileNotFoundError:
+                            pass
+                        except BaseException:
+                            stray.append(target)
                     else:
                         _restore_target(record[0], record[1], target)
                 except BaseException:
@@ -551,6 +592,12 @@ def _publish(staged):
                           + ", ".join(str(item) for item in kept))
                 except BaseException:
                     pass
+            if stray:
+                try:
+                    _note("回滚未能删除本次新产物（它仍留在磁盘上）: "
+                          + ", ".join(str(item) for item in stray))
+                except BaseException:
+                    pass
         raise
     for kind, payload in backups.values():
         _drop_backup(kind, payload)
@@ -564,6 +611,24 @@ def _write_bytes(target, payload):
     except BaseException:
         _discard(temporary)
         raise
+
+
+def _dependency_clash(root, compiled, target):
+    """``target`` 是否落在本次编译读过的某个依赖上；是则返回那条依赖的逻辑路径。
+
+    依赖清单给的是**逻辑路径**（相对 asset root），落盘位置就是 ``root / 逻辑路径``。
+    比较按"同一个文件"来判：路径相同或 inode 相同（硬链接）都算覆盖。
+    """
+    target_key = _safe_resolve(target)
+    target_ident = _identity(target)
+    for dependency in compiled.dependencies:
+        candidate = root / dependency.logical_path
+        if target_key is not None and _safe_resolve(candidate) == target_key:
+            return dependency.logical_path
+        ident = _identity(candidate)
+        if ident is not None and target_ident is not None and ident == target_ident:
+            return dependency.logical_path
+    return None
 
 
 def _run_legacy(args):
@@ -681,6 +746,15 @@ def _run_legacy(args):
             # pxlcompile 载入每份文档时自己判 64 MiB。
             parent = source.absolute().parent
             compiled = pxlcompile.compile_target(source.name, FileSystemResolver(parent), {})
+            # 输出不得覆盖**本次编译读过的依赖**：`-o parts/blade.pxl` 会把被引用的子文档
+            # 截断成 PNG，而预检只比较输出与输入、命令还会返回成功（CodeRabbit 复审）。
+            # 依赖清单是在编译之后才拿得到的，所以这一格只能在写之前逐个入口判。
+            clash = _dependency_clash(parent, compiled, target)
+            if clash is not None:
+                failures += 1
+                _note(str(source) + ": CLI002: 输出会覆盖编译依赖 " + clash + "（未写入）: "
+                      + str(target))
+                continue
             png = pngenc.encode(compiled.width, compiled.height, compiled.rgba)
             _write_bytes(target, png)
         except PxlError as failure:
