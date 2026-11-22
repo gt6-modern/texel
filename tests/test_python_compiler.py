@@ -13,7 +13,9 @@
 """
 
 import ast
+import contextlib
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -23,6 +25,7 @@ import sys
 import time
 import unittest
 import zlib
+from unittest import mock
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -34,6 +37,7 @@ if str(COMPILER) not in sys.path:
     sys.path.insert(0, str(COMPILER))
 
 from texel_compiler import PxlError, capabilities_json, compile_target, encode_png, render_document
+from texel_compiler import cli as compiler_cli
 from texel_compiler import pngdec, pxlcompile
 from texel_compiler.resolver import MemoryResolver, build_memory_resolver
 
@@ -130,6 +134,13 @@ class CapabilitiesTest(unittest.TestCase):
         self.assertEqual(raw, capabilities_json().encode("utf-8"),
                          "CLI 输出与库内档案必须逐字节相同")
         self.assertEqual(1, raw.decode("utf-8").count('"capabilities_version"'))
+
+    def test_matches_canonical_fixture(self):
+        # 能力档案是**共享契约**:两个编译器与 CLI 必须逐字节相同(README §3-4)。
+        # 只测"自己的 schema"永远发现不了分叉 —— Python 曾经报 compiler_id
+        # io.github.texel.python、还把 language_versions 压成一行(审查 #12)。
+        fixture = (ROOT / "spec" / "conformance" / "capabilities" / "pxl-v1.json").read_bytes()
+        self.assertEqual(fixture, self.caps(), "能力档案必须与规范 fixture 逐字节相同")
 
     def test_schema(self):
         data = json.loads(self.caps().decode("utf-8"))
@@ -283,6 +294,335 @@ class CommandLineTest(unittest.TestCase):
                                      extra_env={"PYTHONPATH": str(COMPILER)})
             self.assertEqual(0, code, err.decode("utf-8", "replace"))
             self.assertEqual(before, tree_snapshot(directory), "check 不得产出或删除任何文件")
+
+    def test_deps_manifest_is_not_written_when_the_png_write_fails(self):
+        """PNG 写失败时不得留下「清单已更新、产物没更新」的半份状态。
+
+        Java 侧非 check 分支就是"PNG 成功之后再落清单"；Python 侧曾先写清单，
+        于是下游会拿到一份指向**上次**产物的清单，而命令报的是 I/O 失败。
+        """
+        with workspace() as directory:
+            (directory / "entry.pxl").write_bytes(MiniDocumentTest().document())
+            blocker = directory / "blocker"
+            blocker.write_bytes(b"not a directory")
+            manifest = directory / "deps.tsv"
+            code, out, err = run_cli(["compile", "entry.pxl", "--asset-root", str(directory),
+                                      "-o", str(blocker / "out.png"),
+                                      "--deps", str(manifest)])
+            self.assertEqual(4, code, err.decode("utf-8", "replace"))
+            self.assertIn(b"CLI003", err)
+            self.assertFalse(manifest.exists(), "PNG 写失败时清单不得先落盘")
+
+    def test_deps_target_that_is_a_directory_is_a_usage_error(self):
+        """清单目标是目录时必须在写任何东西之前挡住。
+
+        走到改名阶段才发现的话，PNG 已经替换成功、清单改名失败——命令报错却留下了新 PNG。
+        """
+        with workspace() as directory:
+            (directory / "entry.pxl").write_bytes(MiniDocumentTest().document())
+            png = directory / "out.png"
+            png.write_bytes(b"OLD-PNG")
+            deps_directory = directory / "depsdir"
+            deps_directory.mkdir()
+            code, out, err = run_cli(["compile", "entry.pxl", "--asset-root", str(directory),
+                                      "-o", str(png), "--deps", str(deps_directory)])
+            self.assertEqual(2, code, err.decode("utf-8", "replace"))
+            self.assertIn(b"CLI004", err)
+            self.assertEqual(b"OLD-PNG", png.read_bytes(), "用法错不得改动已有产物")
+
+    def test_locked_deps_rolls_back_the_png(self):
+        """改名阶段失败（清单被别的进程打开）时，PNG 必须跟着回滚。
+
+        两份产物是**一次事务**：先各自写进临时文件并刷盘，两份都成功了才改名；改名失败就
+        把已经换上去的那份退回去。否则命令失败却留下「新 PNG + 旧清单」。
+        """
+        with workspace() as directory:
+            (directory / "entry.pxl").write_bytes(MiniDocumentTest().document())
+            png = directory / "out.png"
+            manifest = directory / "deps.tsv"
+            png.write_bytes(b"OLD-PNG")
+            manifest.write_bytes(b"OLD-MANIFEST")
+            handle = open(str(manifest), "rb")
+            try:
+                code, out, err = run_cli(["compile", "entry.pxl", "--asset-root", str(directory),
+                                          "-o", str(png), "--deps", str(manifest)])
+            finally:
+                handle.close()
+            if code == 0:
+                self.skipTest("该平台允许替换被打开的文件，这条判据在本机无从验证")
+            self.assertEqual(4, code, err.decode("utf-8", "replace"))
+            self.assertEqual(b"OLD-PNG", png.read_bytes(), "改名失败时 PNG 必须回滚")
+            self.assertEqual(b"OLD-MANIFEST", manifest.read_bytes(), "清单不得被改动")
+            self.assertEqual([], sorted(directory.glob(".texel-*")),
+                             "临时文件与回滚备份都必须清掉")
+
+    def test_failed_png_write_keeps_the_manifest_off_stdout(self):
+        """`--deps -` 的清单必须在产物落盘**之后**才打到 stdout。"""
+        with workspace() as directory:
+            (directory / "entry.pxl").write_bytes(MiniDocumentTest().document())
+            blocker = directory / "blocker"
+            blocker.write_bytes(b"x")
+            code, out, err = run_cli(["compile", "entry.pxl", "--asset-root", str(directory),
+                                      "-o", str(blocker / "out.png"), "--deps", "-"])
+            self.assertEqual(4, code, err.decode("utf-8", "replace"))
+            self.assertEqual(b"", out, "PNG 没写出来时清单不该已经打到 stdout")
+
+    def test_hardlinked_output_and_deps_are_refused(self):
+        """`-o out.png --deps alias.tsv`（alias 是 out.png 的硬链接）必须拒。
+
+        `resolve()` 只认路径与符号链接，认不出同一个 inode；结果是清单写进去又被 PNG
+        覆盖，命令还报成功。Java 侧同一处判据用的是 `Files.isSameFile`。
+        """
+        with workspace() as directory:
+            (directory / "entry.pxl").write_bytes(MiniDocumentTest().document())
+            output = directory / "out.png"
+            output.write_bytes(b"OLD-PNG")
+            alias = directory / "alias.tsv"
+            try:
+                os.link(str(output), str(alias))
+            except (OSError, AttributeError, NotImplementedError):
+                self.skipTest("该文件系统不支持硬链接")
+            code, _out, err = run_cli(["compile", "entry.pxl", "--asset-root", str(directory),
+                                       "-o", str(output), "--deps", str(alias)])
+            self.assertEqual(2, code, err.decode("utf-8", "replace"))
+            self.assertIn(b"CLI002", err)
+            self.assertEqual(b"OLD-PNG", output.read_bytes(), "拒绝前不得改写产物")
+
+    def test_single_output_is_exactly_one_atomic_replace(self):
+        """没有 `--deps` 时只允许一次 `os.replace(临时文件 -> 目标)`。
+
+        "先把旧产物移走、再改名"那种事务写法会让目标路径出现不存在的瞬间：进程被打断就
+        只剩一份隐藏备份。这条断言把"单产物 = 一次原子替换"钉死。
+        """
+        with workspace() as directory:
+            (directory / "entry.pxl").write_bytes(MiniDocumentTest().document())
+            target = directory / "out.png"
+            target.write_bytes(b"OLD-PNG")
+            calls = self._record_replaces(
+                ["compile", "entry.pxl", "--asset-root", str(directory), "-o", str(target)])
+            self.assertEqual(1, len(calls), "单产物只允许一次原子替换:%r" % (calls,))
+            self.assertEqual(str(target), calls[0][1])
+            self.assertNotIn(str(target), [source for source, _destination in calls],
+                             "目标不许被移走当备份:%r" % (calls,))
+            self.assertFalse([item for item in calls if item[1].endswith(".prev")],
+                             "单产物不该产生备份文件:%r" % (calls,))
+
+    def test_two_artifacts_back_up_by_copying_not_moving(self):
+        """两份产物时备份必须是**复制**：目标要一直留在原位直到最后一次原子替换。"""
+        with workspace() as directory:
+            (directory / "entry.pxl").write_bytes(MiniDocumentTest().document())
+            output = directory / "out.png"
+            manifest = directory / "deps.tsv"
+            output.write_bytes(b"OLD-PNG")
+            manifest.write_bytes(b"OLD-MANIFEST")
+            calls = self._record_replaces(
+                ["compile", "entry.pxl", "--asset-root", str(directory),
+                 "-o", str(output), "--deps", str(manifest)])
+            sources = [source for source, _destination in calls]
+            self.assertNotIn(str(output), sources, "输出被移走当备份:%r" % (calls,))
+            self.assertNotIn(str(manifest), sources, "清单被移走当备份:%r" % (calls,))
+            self.assertEqual([], sorted(directory.glob(".texel-*")), "备份必须清掉")
+
+    def _record_replaces(self, args):
+        """跑一次 in-process CLI，记录它调用过的每一次 os.replace。"""
+        calls = []
+        original = os.replace
+
+        def spy(source, destination):
+            calls.append((str(source), str(destination)))
+            return original(source, destination)
+
+        with mock.patch("os.replace", spy):
+            code = compiler_cli.main(args)
+        self.assertEqual(0, code, "被观测的这次编译本身必须成功")
+        return calls
+
+    def test_failed_restore_keeps_the_backup_instead_of_deleting_it(self):
+        """双重故障：清单提交失败，接着 PNG 恢复也失败——旧产物备份**必须留下**。
+
+        曾经把"恢复失败"的备份放回普通清理集合，于是命令失败之后：目标留成新内容、
+        旧内容的备份也被删掉，用户连人工恢复的退路都没有。
+        """
+        with workspace() as directory:
+            (directory / "entry.pxl").write_bytes(MiniDocumentTest().document())
+            png = directory / "out.png"
+            manifest = directory / "deps.tsv"
+            png.write_bytes(b"OLD-PNG")
+            manifest.write_bytes(b"OLD-MANIFEST")
+            original = os.replace
+
+            def failing_replace(source, destination):
+                if os.path.abspath(str(destination)) == os.path.abspath(str(manifest)):
+                    raise OSError("注入：清单提交失败")
+                if str(source).endswith(".prev"):
+                    raise OSError("注入：恢复失败")
+                return original(source, destination)
+
+            stream = io.StringIO()
+            with mock.patch.object(os, "replace", failing_replace):
+                with contextlib.redirect_stderr(stream):
+                    code = compiler_cli.main(["compile", "entry.pxl",
+                                              "--asset-root", str(directory),
+                                              "-o", str(png), "--deps", str(manifest)])
+            err = stream.getvalue()
+            self.assertEqual(4, code, err)
+            self.assertNotEqual(b"OLD-PNG", png.read_bytes(), "注入下 PNG 应当已被替换")
+            kept = sorted(directory.glob(".texel-*.prev"))
+            self.assertEqual(1, len(kept), "恢复失败的备份必须留在目录里，实际: %r" % (kept,))
+            self.assertEqual(b"OLD-PNG", kept[0].read_bytes(), "备份必须还是旧内容")
+            self.assertIn("回滚失败", err, "必须把保留下来的备份路径说出来")
+
+    def test_target_with_other_hard_links_refuses_a_copy_backup(self):
+        """硬链接备份失败且目标还有别的名字时，发布必须中止。
+
+        "硬链接建不起来"不只有 FAT/exFAT 一种：权限拒绝、配额、链接数上限都可能发生。
+        这时退化成复制备份，回滚出来的是新 inode——与别的名字之间的链接关系永久丢掉。
+        """
+        with workspace() as directory:
+            (directory / "entry.pxl").write_bytes(MiniDocumentTest().document())
+            real = directory / "real.png"
+            png = directory / "out.png"
+            manifest = directory / "deps.tsv"
+            real.write_bytes(b"OLD-REAL")
+            manifest.write_bytes(b"OLD-MANIFEST")
+            try:
+                os.link(str(real), str(png))
+            except OSError:
+                self.skipTest("该文件系统不支持硬链接")
+            stream = io.StringIO()
+            with mock.patch.object(os, "link", side_effect=PermissionError("注入：拒绝建硬链接")):
+                with contextlib.redirect_stderr(stream):
+                    code = compiler_cli.main(["compile", "entry.pxl",
+                                              "--asset-root", str(directory),
+                                              "-o", str(png), "--deps", str(manifest)])
+            err = stream.getvalue()
+            self.assertEqual(4, code, err)
+            self.assertIn("硬链接", err)
+            self.assertEqual(b"OLD-REAL", real.read_bytes(), "旧内容不得被改动")
+            self.assertEqual(b"OLD-MANIFEST", manifest.read_bytes(), "清单不得被改动")
+            self.assertTrue(os.path.samefile(str(png), str(real)),
+                            "硬链接身份必须保持原样")
+            self.assertEqual([], sorted(directory.glob(".texel-*")), "不得留下任何临时/备份文件")
+
+    def test_symlink_backup_is_a_real_object_on_disk(self):
+        """符号链接产物的备份必须是**磁盘上的对象**，不能只存在内存里。
+
+        恢复失败时，只有磁盘上还有那份目标才谈得上"人工恢复"：内存里的 readlink 文本
+        在进程退出后就没了，而目标已经被删掉（2026-11-20 审查 P1）。
+        """
+        with workspace() as directory:
+            (directory / "entry.pxl").write_bytes(MiniDocumentTest().document())
+            real = directory / "real.png"
+            png = directory / "out.png"
+            manifest = directory / "deps.tsv"
+            real.write_bytes(b"OLD-REAL")
+            manifest.write_bytes(b"OLD-MANIFEST")
+            try:
+                png.symlink_to(real.name)
+            except (OSError, NotImplementedError, AttributeError):
+                self.skipTest("本机无法建立符号链接")
+            original = os.replace
+
+            def failing_replace(source, destination):
+                if os.path.abspath(str(destination)) == os.path.abspath(str(manifest)):
+                    raise OSError("注入：清单提交失败")
+                if str(source).endswith(".prev"):
+                    raise OSError("注入：符号链接恢复失败")
+                return original(source, destination)
+
+            stream = io.StringIO()
+            with mock.patch.object(os, "replace", failing_replace):
+                with contextlib.redirect_stderr(stream):
+                    code = compiler_cli.main(["compile", "entry.pxl",
+                                              "--asset-root", str(directory),
+                                              "-o", str(png), "--deps", str(manifest)])
+            err = stream.getvalue()
+            self.assertEqual(4, code, err)
+            kept = sorted(directory.glob(".texel-*.prev"))
+            self.assertEqual(1, len(kept), "恢复失败的备份必须留在目录里，实际: %r" % (kept,))
+            self.assertTrue(kept[0].is_symlink(), "备份必须是符号链接本身，不是一段内存文本")
+            self.assertEqual(real.name, os.readlink(str(kept[0])), "链接目标必须原样")
+            self.assertIn("回滚失败", err)
+
+    def test_unreadable_subdirectory_is_not_silently_skipped(self):
+        """目录读不动是 I/O 失败（退出 1），不是"这里没有文件"。
+
+        静默跳过会让"目录模式少产出一批 PNG"无从发现，其余文件成功时命令还返回 0，
+        产出一个不完整的集合（2026-11-20 审查 P2）。Java 侧 collect() 同样按 I/O 失败报。
+        """
+        with workspace() as directory:
+            (directory / "entry.pxl").write_bytes(MiniDocumentTest().document())
+            locked = directory / "locked"
+            locked.mkdir()
+            locked_entry = locked / "inner.pxl"
+            locked_entry.write_bytes(MiniDocumentTest().document())
+            original = Path.iterdir
+
+            def guarded(self):
+                if os.path.abspath(str(self)) == os.path.abspath(str(locked)):
+                    raise PermissionError("注入：目录不可读")
+                return original(self)
+
+            stream = io.StringIO()
+            with mock.patch.object(Path, "iterdir", guarded):
+                with contextlib.redirect_stderr(stream):
+                    code = compiler_cli.main([str(directory)])
+            err = stream.getvalue()
+            self.assertEqual(1, code, "目录读取失败必须按批处理失败退出: " + err)
+            self.assertIn("目录读取失败", err)
+            self.assertIn("texel-compiler-python: ", err)
+
+    def test_memory_error_at_top_level_is_a_controlled_exit(self):
+        """控制台脚本指向 ``cli.main``：顶层兜底必须在这一层，不在 __main__.py。"""
+        stream = io.StringIO()
+        with mock.patch.object(compiler_cli, "_main",
+                               side_effect=MemoryError("注入：宿主内存不足")):
+            with contextlib.redirect_stderr(stream):
+                code = compiler_cli.main(["whatever.pxl"])
+        err = stream.getvalue()
+        self.assertEqual(4, code, "内存不足是宿主资源失败，退出码 4: " + err)
+        self.assertEqual(1, len(err.splitlines()), "必须恰好一行: %r" % err)
+        self.assertIn("CLI001", err)
+
+    def test_restore_that_runs_out_of_memory_still_cleans_and_reports(self):
+        """双重故障：清单提交失败，恢复时也内存不足——清理与"保留路径"报告都不能被中断。
+
+        逐项恢复只捕获 OSError 时，MemoryError 会当场跳出循环：未使用的备份不清理、保留
+        下来的路径也不报（2026-11-20 审查 P2）。
+        """
+        with workspace() as directory:
+            (directory / "entry.pxl").write_bytes(MiniDocumentTest().document())
+            png = directory / "out.png"
+            manifest = directory / "deps.tsv"
+            png.write_bytes(b"OLD-PNG")
+            manifest.write_bytes(b"OLD-MANIFEST")
+            original = os.replace
+
+            def failing_replace(source, destination):
+                if os.path.abspath(str(destination)) == os.path.abspath(str(manifest)):
+                    raise OSError("注入：清单提交失败")
+                if str(source).endswith(".prev"):
+                    raise MemoryError("注入：恢复时内存不足")
+                return original(source, destination)
+
+            stream = io.StringIO()
+            with mock.patch.object(os, "replace", failing_replace):
+                with contextlib.redirect_stderr(stream):
+                    code = compiler_cli.main(["compile", "entry.pxl",
+                                              "--asset-root", str(directory),
+                                              "-o", str(png), "--deps", str(manifest)])
+            err = stream.getvalue()
+            self.assertEqual(4, code, err)
+            lines = err.splitlines()
+            self.assertEqual(2, len(lines), "一条 I/O 失败 + 一条保留路径: %r" % err)
+            for line in lines:
+                self.assertTrue(line.startswith("texel-compiler-python: "), line)
+            self.assertTrue(any("回滚失败" in line for line in lines), err)
+            leftovers = sorted(directory.glob(".texel-*"))
+            self.assertEqual(1, len(leftovers),
+                             "只剩「恢复失败的那一份」，其余备份必须清掉: %r" % (leftovers,))
+            self.assertTrue(str(leftovers[0]).endswith(".prev"), leftovers[0])
+            self.assertIn("回滚失败", err, "保留的备份路径必须说出来: %r" % err)
 
     def test_failure_leaves_no_output(self):
         with workspace() as directory:
@@ -1152,6 +1492,109 @@ class PngTrnsOrderTest(unittest.TestCase):
                                          (b"IDAT", b"")])
         compiled = compile_files(files)
         self.assertEqual([0x11, 0x22, 0x33, 0x00], list(compiled.rgba[:4]))
+
+
+class PublishTransactionTest(unittest.TestCase):
+    """两份产物是一次事务：失败时目录项必须**恢复原样**，不只是内容。
+
+    这几条走进程内的 main()：要注入 MemoryError、要锁住清单文件，子进程里做不到。
+    """
+
+    def _entry(self, directory):
+        (directory / "entry.pxl").write_bytes(MiniDocumentTest().document())
+
+    def _run(self, directory, png, deps):
+        stream = io.StringIO()
+        with contextlib.redirect_stderr(stream):
+            code = compiler_cli.main(["compile", "entry.pxl", "--asset-root", str(directory),
+                                      "-o", str(png), "--deps", str(deps)])
+        return code, stream.getvalue()
+
+    def test_hardlinked_target_keeps_its_identity(self):
+        """回归：回滚只能恢复内容的话，硬链接会退化成普通文件（链接关系永久丢失）。"""
+        with workspace() as directory:
+            self._entry(directory)
+            real = directory / "real.png"
+            real.write_bytes(b"OLD-REAL")
+            png = directory / "out.png"
+            try:
+                os.link(str(real), str(png))
+            except OSError:
+                self.skipTest("该文件系统不支持硬链接")
+            manifest = directory / "deps.tsv"
+            manifest.write_bytes(b"OLD-MANIFEST")
+            handle = open(str(manifest), "rb")
+            try:
+                code, err = self._run(directory, png, manifest)
+            finally:
+                handle.close()
+            if code == 0:
+                self.skipTest("该平台允许替换被打开的文件，这条判据在本机无从验证")
+            self.assertEqual(4, code, err)
+            self.assertTrue(os.path.samefile(str(png), str(real)),
+                            "回滚必须把硬链接身份恢复，而不是换成一个新文件")
+            self.assertEqual(b"OLD-REAL", real.read_bytes(), "旧内容必须原样")
+            self.assertEqual(b"OLD-MANIFEST", manifest.read_bytes())
+            self.assertEqual([], sorted(directory.glob(".texel-*")),
+                             "临时文件与备份都必须清掉")
+
+    def test_symbolic_link_target_stays_a_link(self):
+        """回归：回滚不能把符号链接换成一个普通文件。"""
+        with workspace() as directory:
+            self._entry(directory)
+            real = directory / "real.png"
+            real.write_bytes(b"OLD-REAL")
+            png = directory / "out.png"
+            try:
+                os.symlink("real.png", str(png))
+            except (OSError, NotImplementedError, AttributeError):
+                self.skipTest("本机不允许创建文件符号链接")
+            manifest = directory / "deps.tsv"
+            manifest.write_bytes(b"OLD-MANIFEST")
+            handle = open(str(manifest), "rb")
+            try:
+                code, err = self._run(directory, png, manifest)
+            finally:
+                handle.close()
+            if code == 0:
+                self.skipTest("该平台允许替换被打开的文件，这条判据在本机无从验证")
+            self.assertEqual(4, code, err)
+            self.assertTrue(png.is_symlink(), "回滚必须重建符号链接，而不是留下普通文件")
+            self.assertEqual("real.png", os.readlink(str(png)), "链接目标必须原样")
+            self.assertEqual(b"OLD-REAL", real.read_bytes(), "链接指向的文件不得被改写")
+            self.assertEqual([], sorted(directory.glob(".texel-*")))
+
+    def test_memory_error_leaves_no_temporary_files(self):
+        """回归：MemoryError 绕过只捕获 OSError 的清理，会把 .texel-*.tmp 留在目录里。"""
+        with workspace() as directory:
+            self._entry(directory)
+            png = directory / "out.png"
+            png.write_bytes(b"OLD-PNG")
+            manifest = directory / "deps.tsv"
+            manifest.write_bytes(b"OLD-MANIFEST")
+            original = os.replace
+
+            def not_enough_memory(source, destination):
+                if os.path.abspath(str(destination)) == os.path.abspath(str(manifest)):
+                    raise MemoryError("注入：清单提交时内存不足")
+                return original(source, destination)
+
+            stream = io.StringIO()
+            with mock.patch.object(os, "replace", not_enough_memory):
+                with contextlib.redirect_stderr(stream):
+                    code = compiler_cli.main(["compile", "entry.pxl",
+                                              "--asset-root", str(directory),
+                                              "-o", str(png), "--deps", str(manifest)])
+            err = stream.getvalue()
+            # 控制台脚本指向 cli.main，所以 MemoryError 必须在这里被转成受控错误：
+            # 泄漏 traceback 是确证问题（2026-11-20 审查 P2）。
+            self.assertEqual(4, code, err)
+            self.assertEqual(1, len(err.splitlines()), "必须恰好一行: %r" % err)
+            self.assertIn("CLI001", err)
+            self.assertEqual(b"OLD-PNG", png.read_bytes(), "MemoryError 也必须回滚已提交的产物")
+            self.assertEqual(b"OLD-MANIFEST", manifest.read_bytes())
+            self.assertEqual([], sorted(directory.glob(".texel-*")),
+                             "任何失败路径都不许把暂存文件留在目录里")
 
 
 if __name__ == "__main__":

@@ -208,8 +208,21 @@ def execute_ops(surface, palette, plan):
             asset = stamp.asset
             rgba = asset.rgba
             stride = asset.width * 4
-            rows = [rgba[row * stride:(row + 1) * stride] for row in range(asset.height)]
-            _draw_rows(surface, stamp.x, stamp.y, rows, asset.width,
+            # **先裁剪再切行**。原实现按素材整高建行切片、把裁剪留给 `_draw_rows`:画布
+            # 1×1 配 2048² 素材时,一次完全不可见的 stamp 也复制 16 MiB,而 §5.0.2 计费的
+            # 裁剪写入面积是 0 —— 于是"写 0 字节"的 op 不受预算约束(审查 #18)。
+            first = max(0, -stamp.y)
+            last = min(asset.height, surface.height - stamp.y)
+            if last <= first:
+                continue          # 纵向完全离屏:连一行都不切
+            if stamp.x >= surface.width or stamp.x + asset.width <= 0:
+                continue          # 横向完全离屏:同样一行都不切
+            # 翻转时可见行在素材里的下标是倒序的,仍是**一段连续区间**;区间端点按翻转折算,
+            # 再用 `stamp.y + first` 平移目标行号,`_draw_rows` 的翻转移位因此保持不变。
+            low = asset.height - last if stamp.flip_y else first
+            high = asset.height - first if stamp.flip_y else last
+            rows = [rgba[row * stride:(row + 1) * stride] for row in range(low, high)]
+            _draw_rows(surface, stamp.x, stamp.y + first, rows, asset.width,
                        stamp.flip_x, stamp.flip_y)
         else:
             raise AssertionError("未知的 op 计划项: " + str(kind))

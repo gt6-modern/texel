@@ -44,6 +44,7 @@ public final class CompilerTestMain {
         manifestAndCycle();
         versionGateAndGaps();
         params();
+        jsonStrings();
         versionDispatch();
         budgets();
         forwarding();
@@ -525,8 +526,56 @@ public final class CompilerTestMain {
         return MemoryAssetResolver.of(files);
     }
 
-    // ------------------------------------------------------------ 版本分派与预算门禁（§2 / §11.2）
+    // ------------------------------------------------------------ JSON 字符串与代理项（§3.4 / §11.1 阶段 3）
 
+    private static void jsonStrings() {
+        // 孤立代理项不是合法 Unicode 文本。Python 的 jsonx 在解析阶段就以 PXL001 拒绝；
+        // Java 以前原样接受半个代理项，于是同一份文档继续跑到"未知 op"的 PXL004 ——
+        // 同一输入两条实现给出不同错误码（审查 #11）。这里把三个阶段一起钉住：
+        // 两个孤立方向都拒绝、合法代理对仍然接受、且代理项抢在 op 检查之前。
+        run("json.isolated-low-surrogate-is-pxl001", new Body() {
+            public void run() throws Exception {
+                expectJsonError("{\"k\":\"\\uDC00\"}", Codes.PXL001, "孤立的低代理项");
+                expectJsonError("{\"k\":\"a\\uDFFFb\"}", Codes.PXL001, "孤立的低代理项");
+            }
+        });        run("json.isolated-high-surrogate-is-pxl001", new Body() {
+            public void run() throws Exception {
+                expectJsonError("{\"k\":\"\\uD800\"}", Codes.PXL001, "高代理项之后缺少低代理项");
+                expectJsonError("{\"k\":\"\\uD800x\"}", Codes.PXL001, "高代理项之后缺少低代理项");
+                expectJsonError("{\"k\":\"\\uD800\\u0041\"}", Codes.PXL001, "代理对不完整");
+            }
+        });
+        run("json.valid-surrogate-pair-is-one-code-point", new Body() {
+            public void run() throws Exception {
+                Json.Value value = Json.parse("{\"k\":\"\\uD83D\\uDE00\"}".getBytes(UTF8));
+                String text = value.members.get("k").text;
+                equal(1, text.codePointCount(0, text.length()), "代理对按一个码点计数（§3.4）");
+            }
+        });
+        run("json.surrogate-rejection-precedes-op-checks", new Body() {
+            public void run() throws Exception {
+                // 缺陷是"孤立低代理 + 未知 op"同时成立：JSON 阶段先失败，所以是 PXL001。
+                String document = "{\"format\":\"PXL\",\"version\":1,\"encoding\":\"char\","
+                        + "\"width\":1,\"height\":1,\"palette\":[\"FFFFFFFF\"],"
+                        + "\"layers\":[{\"name\":\"base\",\"blend\":\"normal\","
+                        + "\"ops\":[{\"op\":\"bogus\",\"value\":\"\\uDC00\"}]}]}";
+                expectCompile("entry.pxl", mapOf("entry.pxl", document),
+                        Codes.PXL001, "JSON/Unicode 阶段先于 op 检查");
+            }
+        });
+    }
+
+    /** 直接喂 JSON 文本给解析器，断言错误码；与 Python ``jsonx`` 的诊断位置一致。 */
+    private static void expectJsonError(final String text, final String code, final String what) {
+        try {
+            Json.parse(text.getBytes(UTF8));
+            throw new AssertionError(what + "：应当失败却没有");
+        } catch (PxlFormatException failure) {
+            equal(code, failure.code(), what);
+        }
+    }
+
+    // ------------------------------------------------------------ 版本分派与预算门禁（§2 / §11.2）
     private static void versionDispatch() {
         // 走**生产入口** PxlCompiler（不是 PxlParser）：F01 之所以漏网，就是因为门禁一直用
         // PxlParser 这个 v0 入口跑，v1 的域判定根本没被碰到。
@@ -1234,7 +1283,7 @@ public final class CompilerTestMain {
      * exit 0；CI 里 grep "COMPILER_UNITS=68" 会把「66 跑 + 2 跳过」和「68 全跑」混为一谈。
      * 断言 executed + SKIPPED == 总数，并限定跳过名单，才让这个数字可信。
      */
-    private static final int EXPECTED_TOTAL = 71;
+    private static final int EXPECTED_TOTAL = 75;
 
     private static final java.util.Set<String> ALLOWED_SKIPS =
             new java.util.HashSet<String>(java.util.Arrays.asList(

@@ -10,9 +10,9 @@ from pathlib import Path
 from urllib.parse import quote
 
 if __package__:
-    from .check_release_assets import local_assets, verify_assets
+    from .check_release_assets import local_assets, require_release_set, verify_assets
 else:
-    from check_release_assets import local_assets, verify_assets
+    from check_release_assets import local_assets, require_release_set, verify_assets
 from collections import namedtuple
 
 
@@ -209,9 +209,12 @@ def publish(repo, tag, expected_sha, directory, notes, runner=_run):
     plan = current()
     if not plan["actions"]:
         return plan
-    # Check local inputs before deleting an existing draft.
+    # Check local inputs before deleting an existing draft. The release contract
+    # (fixed asset set + SPDX SBOM, issue #19) is enforced here, on the same
+    # directory the upload below will use, so an incomplete set fails while
+    # failing is still free.
     directory, notes = Path(directory), Path(notes)
-    local_assets(directory)
+    require_release_set(directory, tag[1:])
     if not notes.read_text(encoding="utf-8").strip():
         raise ReleaseStateError("release notes are empty")
     release_id = plan.get("release_id")

@@ -1,18 +1,12 @@
-"""python -m texel_compiler 的入口。"""
+"""``python -m texel_compiler`` 的入口。
+
+顶层异常兜底在 ``cli.main`` 里（控制台脚本指向的也是它），这里只负责把退出码交给
+解释器：两处各写一份兜底必然漂开，而用户实际执行的是 ``texel-compiler-python``。
+"""
 
 import sys
 
 from .cli import main
 
 if __name__ == "__main__":
-    try:
-        sys.exit(main())
-    except MemoryError:
-        # §10.2.1：驻留内存不足是宿主资源失败，不是 PXL 码。
-        sys.stderr.write("texel: CLI001: I/O 失败: 宿主内存不足（工作集超出可用内存）\n")
-        sys.exit(4)
-    except (OSError, RuntimeError) as failure:
-        # 宿主 I/O 与链接环（Windows 上 resolve 循环链接会抛 RuntimeError）必须
-        # 变成受控错误：泄漏 traceback 是确证问题（发布态复核第二节）。
-        sys.stderr.write("texel: 宿主 I/O 失败: " + str(failure) + "\n")
-        sys.exit(2)
+    sys.exit(main())

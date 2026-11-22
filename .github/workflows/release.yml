@@ -96,6 +96,12 @@ jobs:
       - name: Hash all final assets including the SBOM
         working-directory: dist/release
         run: sha256sum * > SHA256SUMS
+      # 资产集是发布契约的一部分:少一件就发布一个缺文件的版本，而这一步之后全是**不可逆**
+      # 的动作(证明、上传、建 Release 页)。所以在这里用同一份判据守一遍，而不是只信构建
+      # 脚本"应该都产出了"(审查 #19)。tools/release_state.py 在真正动 Release 之前还会
+      # 用同一套规则再验一次。
+      - name: Verify the release asset set
+        run: python tools/check_release_assets.py dist/release --version "${{ steps.version.outputs.value }}"
       # 供应链证明只在公开仓库可用：私有仓库 + 组织免费计划会被 GitHub 直接拒绝
       # （Release run #4 实测："Feature not available for the gt6-modern organization"）。
       # 它不该挡住构建与发布，所以按仓库可见性跳过；公开后自动恢复。
@@ -142,12 +148,18 @@ jobs:
     permissions:
       id-token: write
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: python-distributions-importer
           path: dist/python
       # 发布必须可重跑：同一个版本重复上传 PyPI 会被拒（"File already exists"），
       # 那样重跑就永远绿不了。先问 PyPI 的 JSON API（公开、不需要凭据），已发布就跳过。
+      #
+      # 判据全在 tools/release_probes.py 里：**只有 404 算"没发布"**，TLS/DNS/403/429/5xx
+      # 一律让 job 红（`curl -fsS` 会把它们全塞进 else，于是基础设施故障被当成"版本不存在"，
+      # 发布流程接着做不可幂等的上传 —— 审查 #21）；而 200 也必须核对 wheel 与 sdist 都在，
+      # 半发布同样让 job 红（审查 #20）。
       - name: Skip when this version is already on PyPI
         id: published
         env:
@@ -157,13 +169,8 @@ jobs:
           wheel=$(ls dist/python/*.whl | head -1)
           test -n "$wheel"
           version=$(basename "$wheel" | sed -E 's/^[^-]+-([^-]+)-.*$/\1/')
-          if curl -fsS "https://pypi.org/pypi/$PROJECT/$version/json" >/dev/null 2>&1; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "$PROJECT $version 已在 PyPI 上，跳过上传"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "PyPI 上还没有 $PROJECT $version，继续上传"
-          fi
+          python tools/release_probes.py pypi --project "$PROJECT" --version "$version" \
+            >> "$GITHUB_OUTPUT"
       - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         if: steps.published.outputs.skip != 'true'
         with:
@@ -178,10 +185,13 @@ jobs:
     permissions:
       id-token: write
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: python-distributions-compiler
           path: dist/python
+      # 与 importer 同一个判据（tools/release_probes.py）：只有 404 算未发布，
+      # 200 还要 wheel+sdist 齐全（审查 #20 / #21）。
       - name: Skip when this version is already on PyPI
         id: published
         env:
@@ -191,13 +201,8 @@ jobs:
           wheel=$(ls dist/python/*.whl | head -1)
           test -n "$wheel"
           version=$(basename "$wheel" | sed -E 's/^[^-]+-([^-]+)-.*$/\1/')
-          if curl -fsS "https://pypi.org/pypi/$PROJECT/$version/json" >/dev/null 2>&1; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "$PROJECT $version 已在 PyPI 上，跳过上传"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "PyPI 上还没有 $PROJECT $version，继续上传"
-          fi
+          python tools/release_probes.py pypi --project "$PROJECT" --version "$version" \
+            >> "$GITHUB_OUTPUT"
       - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         if: steps.published.outputs.skip != 'true'
         with:
@@ -213,6 +218,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: maven-central
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: central-bundle
@@ -223,17 +229,14 @@ jobs:
         run: |
           # 发布必须可重跑：同一个版本已经进了 Central 之后再传一次会被拒（"already exists"），
           # 那样重跑就永远绿不了。这里先问 repo1（公开、不需要凭据），已存在就跳过上传。
+          #
+          # 判据在 tools/release_probes.py：只有 404 算未发布；200 还要求 texel-core 与
+          # texel-cli **两个** artifact 都在（只探 core 会把"core 在、cli 不在"的半发布当成
+          # 完成 —— 审查 #20）；其它状态一律让 job 红（审查 #21）。
           bundle=$(find dist -name '*-central.zip' -print -quit)
           test -n "$bundle"
           version=$(basename "$bundle" | sed -e 's/^texel-//' -e 's/-central\.zip$//')
-          probe="https://repo1.maven.org/maven2/io/github/gt6-modern/texel-core/$version/texel-core-$version.pom"
-          if curl -fsS --head "$probe" >/dev/null 2>&1; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "io.github.gt6-modern:texel-core:$version 已在 Central 上，跳过上传"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "Central 上还没有 $version，继续上传"
-          fi
+          python tools/release_probes.py central --version "$version" >> "$GITHUB_OUTPUT"
       - name: Upload Central Portal bundle
         if: steps.released.outputs.skip != 'true'
         env:

@@ -119,6 +119,13 @@ public final class Main {
             } catch (InvalidPathException invalid) {
                 return usage("输入路径含非法字符: " + escape(input) + "（" + invalid.getReason() + "）");
             }
+            if (Files.isDirectory(path) && isLinkLike(path)) {
+                // 递归里的剪枝只看子项：根是符号链接/junction 时整棵树都会走到链接目标上去，
+                // "目录模式处理哪些文件"取决于本机链接（2026-11-20 审查 P2）。
+                ERR.println("texel-compiler: " + escape(input)
+                        + ": 输入目录是符号链接/junction，批量入口不跟随（请给出真实路径）");
+                return 1;
+            }
             if (Files.isDirectory(path)) {
                 int before = sources.size();
                 List<String> skipped = new ArrayList<String>();
@@ -288,33 +295,303 @@ public final class Main {
      */
     private static int writeDependencies(String deps,
             java.util.List<io.github.texel.core.PxlCompiler.Dependency> dependencies) {
+        Path depsFile = Paths.get(deps).toAbsolutePath();
+        Path temporary = null;
+        try {
+            temporary = stageFile(depsFile, manifestBytes(dependencies));
+            atomicMove(temporary, depsFile);
+            return 0;
+        } catch (IOException failure) {
+            deleteQuietly(temporary);
+            ERR.println("texel-compiler: CLI003: I/O 失败: " + escape(failure.toString()));
+            return 4;
+        }
+    }
+
+    /** 依赖清单的 UTF-8 字节：写入文件与写 stdout 用的是**同一份**字节。 */
+    private static byte[] manifestBytes(
+            java.util.List<io.github.texel.core.PxlCompiler.Dependency> dependencies) {
         StringBuilder text = new StringBuilder();
         for (io.github.texel.core.PxlCompiler.Dependency item : dependencies) {
             text.append(item.toTsv()).append((char) 10);
         }
-        Path depsFile = Paths.get(deps).toAbsolutePath();
-        Path parent = depsFile.getParent();
-        Path temporary = null;
+        return text.toString().getBytes(java.nio.charset.Charset.forName("UTF-8"));
+    }
+
+    /**
+     * 目标已存在却**不是普通文件**时返回诊断用的后缀，否则 null。
+     *
+     * <p>必须在写任何东西之前问：等到改名阶段才发现（目标是个目录），先改名的那份产物
+     * 已经替换成功，命令失败却留下了新产物。
+     */
+    private static String nonFileTarget(String path) {
+        if (path == null) {
+            return null;
+        }
+        Path target;
         try {
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-            temporary = Files.createTempFile(parent, ".texel-deps-", ".tmp");
-            Files.write(temporary,
-                    text.toString().getBytes(java.nio.charset.Charset.forName("UTF-8")));
+            target = Paths.get(path);
+        } catch (java.nio.file.InvalidPathException invalid) {
+            // 非法路径另有专门的诊断，这里不抢着报。
+            return null;
+        }
+        if (!Files.exists(target) || Files.isRegularFile(target)) {
+            return null;
+        }
+        return Files.isDirectory(target) ? "是一个目录" : "不是普通文件";
+    }
+
+    /** 把 payload 写进 target 同目录的独占临时文件并刷盘；返回临时路径，**不改名**。 */
+    private static Path stageFile(Path target, byte[] payload) throws IOException {
+        Path parent = target.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Path temporary = Files.createTempFile(parent, ".texel-", ".tmp");
+        boolean staged = false;
+        try {
+            Files.write(temporary, payload);
             syncFile(temporary);
-            atomicMove(temporary, depsFile);
-            return 0;
+            staged = true;
+        } finally {
+            // finally 而不是 catch：写/刷盘阶段的 OutOfMemoryError 也是失败，而调用方
+            // 拿不到这个临时文件名，只能在这里清（2026-11-20 审查 P2）。
+            if (!staged) {
+                deleteQuietly(temporary);
+            }
+        }
+        return temporary;
+    }
+
+    /**
+     * 把产物落盘。没有清单时就是**一次原子替换**；有清单时两份产物当成一次事务。
+     *
+     * <p>为什么不是"先写 PNG 再写清单"：那是两段独立事务，清单写失败会留下「新 PNG +
+     * 旧清单」，下游会把一份过期清单当成这次构建的结果（2026-11-20 审查 P2）。
+     *
+     * <p>为什么备份是**复制**而不是移走：移走目标再改名，中间那一刻目标路径不存在——
+     * 进程被打断就只剩一份隐藏备份，单产物输出也会跟着退化（2026-11-20 审查 P1）。
+     * 这里任何时刻目标都在原位，读者看到的要么是旧内容要么是新内容。
+     *
+     * @return 0 成功；4 表示 I/O 失败（已就地打印 {@code CLI003}）
+     */
+    /**
+     * 一份既有产物的**保身份**备份：硬链接、复制文件，或者另一个同目标的符号链接。
+     *
+     * <p>三种形态都是**磁盘上的对象**，所以恢复就是一次原子改名，备份也能被人捡回来。
+     */
+    static final class Backup {
+        private final Path file;
+
+        Backup(Path file) {
+            this.file = file;
+        }
+    }
+
+    private static int publish(Path pngTarget, byte[] png, Path depsTarget, byte[] manifest) {
+        Path pngTemp = null;
+        Path depsTemp = null;
+        java.util.Map<Path, Backup> backups = new java.util.LinkedHashMap<Path, Backup>();
+        java.util.List<Path> committed = new ArrayList<Path>();
+        try {
+            pngTemp = stageFile(pngTarget, png);
+            if (depsTarget == null) {
+                // 单份产物：一次原子替换，目标路径任何时刻都存在。
+                atomicMove(pngTemp, pngTarget);
+                pngTemp = null;
+                return 0;
+            }
+            depsTemp = stageFile(depsTarget, manifest);
+            // 备份不能移走目标：目标要一直留在原位，直到最后一次原子替换。
+            if (existsOrLink(pngTarget)) {
+                backups.put(pngTarget, backupTarget(pngTarget, pngTemp));
+            }
+            if (existsOrLink(depsTarget)) {
+                backups.put(depsTarget, backupTarget(depsTarget, depsTemp));
+            }
+            // PNG 先改名、清单后改名：万一回滚本身也失败，「新 PNG + 旧清单」是保守的一侧
+            // （看到旧清单下游会重建），反过来「旧 PNG + 新清单」等于让构建系统相信一份
+            // 过期产物。
+            atomicMove(pngTemp, pngTarget);
+            pngTemp = null;
+            committed.add(pngTarget);
+            atomicMove(depsTemp, depsTarget);
+            depsTemp = null;
+            committed.add(depsTarget);
         } catch (IOException failure) {
-            if (temporary != null) {
-                try {
-                    Files.deleteIfExists(temporary);
-                } catch (IOException ignored) {
-                    // 清理失败不掩盖原始错误。
+            java.util.List<Path> kept = rollback(committed, backups);
+            deleteQuietly(pngTemp);
+            deleteQuietly(depsTemp);
+            ERR.println("texel-compiler: CLI003: I/O 失败: " + escape(failure.toString()));
+            reportKeptBackups(kept);
+            return 4;
+        } catch (Error failure) {
+            // OutOfMemoryError 这类 Error 不是 IOException：不在这里清理的话，失败的编译会在
+            // 目录里留下 .texel-*.tmp，已经提交的那份也留成新内容（2026-11-20 审查 P2）。
+            java.util.List<Path> kept = rollback(committed, backups);
+            deleteQuietly(pngTemp);
+            deleteQuietly(depsTemp);
+            reportKeptBackups(kept);
+            throw failure;
+        }
+        for (Backup backup : backups.values()) {
+            dropBackup(backup);
+        }
+        return 0;
+    }
+
+    /**
+     * 失败回滚：已提交的产物按备份恢复原状（连目录项类型与硬链接身份一起恢复）。
+     *
+     * <p>退不回去的那一份**留着备份**：那份旧内容可能只在这里，删掉等于把退路也毁了。
+     */
+    static java.util.List<Path> rollback(java.util.List<Path> committed,
+            java.util.Map<Path, Backup> backups) {
+        java.util.List<Path> kept = new ArrayList<Path>();
+        for (int index = committed.size() - 1; index >= 0; index--) {
+            Path target = committed.get(index);
+            Backup backup = backups.remove(target);
+            try {
+                if (backup == null) {
+                    deleteQuietly(target);
+                } else {
+                    restoreTarget(target, backup);
+                }
+            } catch (IOException | Error ignored) {
+                // 恢复本身也可能因资源耗尽失败（OutOfMemoryError）：一样**留着备份**并继续
+                // 处理剩下的目标，不能在这里中断——否则后面的备份不清理、保留路径也不报。
+                // 退不回去就**留着**备份：那份旧内容可能只在这里。它必须脱离下面那个
+                // "没用上的备份"清理循环——双重故障（提交失败 + 恢复失败）曾把旧产物连
+                // 备份一起删掉，那是不可恢复的丢失。
+                if (backup != null && backup.file != null) {
+                    kept.add(backup.file);
                 }
             }
-            ERR.println("texel-compiler: CLI003: I/O 失败: " + escape(failure.toString()));
-            return 4;
+        }
+        // 只清"还没提交的那一份"的备份；恢复失败的那份留着让人工接手。
+        for (Backup backup : backups.values()) {
+            try {
+                dropBackup(backup);
+            } catch (Error ignored) {
+                // 清理本身失败不掩盖原始错误。
+            }
+        }
+        return kept;
+    }
+
+    /** 目标的硬链接数；宿主给不出这个数时返回 0（当成"可能有别的名字"，不安全）。 */
+    private static int hardLinkCount(Path target) {
+        try {
+            Object value = Files.getAttribute(target, "unix:nlink",
+                    java.nio.file.LinkOption.NOFOLLOW_LINKS);
+            if (value instanceof Number) {
+                return ((Number) value).intValue();
+            }
+        } catch (IOException unreadable) {
+            return 0;
+        } catch (UnsupportedOperationException unsupported) {
+            return 0;
+        } catch (IllegalArgumentException unsupported) {
+            return 0;
+        }
+        return 0;
+    }
+
+    /**
+     * 给既有产物建一份**保身份**的备份。
+     *
+     * <p>只复制内容恢复不了目录项：目标原本是符号链接或硬链接时，回滚会把它换成普通文件，
+     * 链接关系永久丢失（2026-11-20 审查 P2）。所以分三种形态：符号链接记原始文本（回滚时
+     * 按原文本重建链接）、普通文件建**硬链接**（同一个 inode，回滚就是把它换回来，也不必把
+     * 旧产物整份复制一遍）、只有**能证明目标没有别的名字**（nlink == 1，或文件系统根本不
+     * 支持硬链接）时才退化成复制。目标还与别的名字共享 inode 时这里会失败，让整次发布回滚：
+     * 复制备份恢复不了那些名字之间的链接关系，而失败的命令不该改变文件系统。
+     */
+    private static Backup backupTarget(Path target, Path temporary) throws IOException {
+        Path backup = temporary.resolveSibling(temporary.getFileName() + ".prev");
+        if (Files.isSymbolicLink(target)) {
+            // 备份必须是**磁盘上的对象**：只记住链接文本，回滚时要先删掉目标再重建链接，
+            // 重建一旦失败（权限、链接数上限）目标路径就没了，而那份"备份"只活在进程里
+            // （2026-11-20 审查 P1）。所以备份就是另一个指向同一目标的符号链接。
+            try {
+                Files.createSymbolicLink(backup, Files.readSymbolicLink(target));
+            } catch (IOException failure) {
+                deleteQuietly(backup);
+                throw new IOException("无法为符号链接产物建立备份（建立链接失败: " + failure
+                        + "）: " + target);
+            } catch (UnsupportedOperationException unsupported) {
+                deleteQuietly(backup);
+                throw new IOException("该文件系统不支持符号链接，无法备份符号链接产物: " + target);
+            }
+            return new Backup(backup);
+        }
+        try {
+            Files.createLink(backup, target);
+            return new Backup(backup);
+        } catch (UnsupportedOperationException noHardLinks) {
+            // 文件系统根本没有硬链接：那别处也不可能存在指向同一 inode 的名字，复制是等价的。
+        } catch (IOException linkUnavailable) {
+            // 权限拒绝、配额、链接数上限都不是"文件系统不支持硬链接"：目标很可能还与别的
+            // 名字共享 inode，复制出来的备份回滚后是新 inode，那些名字之间的链接关系会永久
+            // 丢掉。只有能证明 nlink == 1 时才允许复制；证明不了就让这次发布失败。
+            int links = hardLinkCount(target);
+            if (links != 1) {
+                throw new IOException("无法为有硬链接的产物建立保身份备份（nlink=" + links
+                        + "，与其它路径共享 inode）: " + target
+                        + "（建硬链接失败: " + linkUnavailable + "）");
+            }
+        }
+        // 复制也要**先写临时文件再改名**：直接写 .prev 的话，复制中途失败（磁盘满、读失败）
+        // 会留下一个没有任何人跟踪的半份备份（2026-11-20 审查 P2）。
+        Path partial = Files.createTempFile(backup.getParent(), ".texel-", ".tmp");
+        try {
+            Files.copy(target, partial, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            syncFile(partial);
+            atomicMove(partial, backup);
+        } catch (IOException failure) {
+            deleteQuietly(partial);
+            deleteQuietly(backup);
+            throw failure;
+        }
+        return new Backup(backup);
+    }
+
+    /** 把"恢复失败、必须保留的备份"逐行说出来：那是人工恢复的唯一退路。 */
+    private static void reportKeptBackups(java.util.List<Path> kept) {
+        for (Path path : kept) {
+            ERR.println("texel-compiler: 回滚失败，旧产物备份保留在: " + escape(path.toString()));
+        }
+    }
+
+    /** 目标存在，或本身就是一个（可能是悬垂的）符号链接。 */
+    private static boolean existsOrLink(Path target) {
+        return Files.isSymbolicLink(target) || Files.exists(target);
+    }
+
+    /**
+     * 把目标的**目录项**恢复原状：三种备份形态都是磁盘对象，一次原子改名就够。
+     *
+     * <p>不能"先删目标再重建链接"：重建失败会留下一个空路径，而符号链接的备份如果只
+     * 存在内存里就连退路都没有（2026-11-20 审查 P1）。
+     */
+    private static void restoreTarget(Path target, Backup backup) throws IOException {
+        atomicMove(backup.file, target);
+    }
+
+    /** 丢掉没用上的备份：三种形态都是磁盘对象，删掉即可。 */
+    private static void dropBackup(Backup backup) {
+        deleteQuietly(backup.file);
+    }
+
+    /** 删文件；不存在或删不掉都不掩盖原始错误。 */
+    private static void deleteQuietly(Path file) {
+        if (file == null) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException ignored) {
+            // 清理失败不掩盖原始错误。
         }
     }
 
@@ -415,11 +692,25 @@ public final class Main {
      *
      * <p>看起来像 PXL 但被跳过的候选（符号链接、扩展名大小写不符）追加进 {@code skipped}，
      * 由调用方逐条告知用户——静默跳过会让"目录模式少产出一个 PNG"无从发现。
+     *
+     * <p>符号链接与 Windows 的 junction 一律不跟随（见 {@link #isLinkLike(Path)}）：
+     * {@code walkFileTree} 的默认只挡符号链接，junction 却被当成普通目录走进去，于是
+     * 给定目录**之外**的 .pxl 也会被编译出 PNG（写回树外）——同一棵树的结果取决于这台
+     * 机器上谁建过链接。
      */
     private static String collect(final Path root, final List<Path> into,
             final List<String> skipped) {
         try {
             Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path directory,
+                        BasicFileAttributes attributes) {
+                    if (!directory.equals(root) && isLinkLike(directory)) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
                     String name = file.getFileName() == null ? "" : file.getFileName().toString();
@@ -442,6 +733,35 @@ public final class Main {
             return failure.getClass().getSimpleName() + ": " + failure.getMessage();
         }
         return null;
+    }
+
+    /**
+     * 该目录是否是符号链接，或 Windows 的 junction / 挂载点。
+     *
+     * <p>{@code Files.isSymbolicLink} 对 junction 返回 false，而 {@code walkFileTree} 的默认
+     * 行为正是靠它——于是 junction 被当成普通目录走进去（实测 Windows + JDK 21）。判据换成
+     * "实路径"：junction 的 {@code toRealPath()} 落在别的目录上，普通子目录则等于"父目录的
+     * 实路径 + 自己的名字"。用父目录的实路径比较，祖先里另有链接时不会误伤正常子目录。
+     */
+    private static boolean isLinkLike(final Path directory) {
+        if (Files.isSymbolicLink(directory)) {
+            return true;
+        }
+        try {
+            Path real = directory.toRealPath();
+            // 先做**词法**归一：调用方可能给的是 `dir\..`、`dir\.\x` 这种带 `..`/`.` 的普通
+            // 路径，而 toRealPath() 已经把词法段消解掉了。不归一的话，`compiler\java\..`
+            // 会被当成 junction 拒掉（2026-11-20 审查 P2）。
+            Path lexical = directory.toAbsolutePath().normalize();
+            Path parent = lexical.getParent();
+            Path expected = parent == null
+                    ? lexical
+                    : parent.toRealPath().resolve(lexical.getFileName());
+            return !real.equals(expected);
+        } catch (IOException unreadable) {
+            // 读不出来就别在这里剪枝：交给 walkFileTree 自己报（否则整棵树会被静默丢掉）。
+            return false;
+        }
     }
 
     private static Path replaceExtension(Path source) {
@@ -482,17 +802,49 @@ public final class Main {
             inputKeys.add(identity(source));
         }
         Set<String> seen = new HashSet<String>();
+        List<Path> seenTargets = new ArrayList<Path>();
         for (int index = 0; index < targets.size(); index++) {
             Path target = targets.get(index);
             String key = identity(target);
             if (inputKeys.contains(key)) {
                 problems.add("输出会覆盖输入: " + escape(target.toString()));
+            } else if (sharesIdentity(target, sources)) {
+                // 路径不同、inode 相同：写入会把入口（或某个素材）截断成 PNG。
+                problems.add("输出与输入是同一个文件（硬链接）: " + escape(target.toString()));
             }
-            if (!seen.add(key)) {
+            boolean sameKey = !seen.add(key);
+            boolean sameFile = sharesIdentity(target, seenTargets);
+            seenTargets.add(target);
+            if (sameKey || sameFile) {
                 problems.add("两个输入写到同一个输出: " + escape(target.toString()));
             }
         }
         return problems;
+    }
+
+    /**
+     * 目标是否与 {@code others} 里**已存在的**某个路径是同一个文件（硬链接）。
+     *
+     * <p>路径身份只能归一同名路径与符号链接：硬链接是另一个目录项指向同一个 inode，
+     * 路径怎么比都不相等，而写入会截断同一份内容（2026-11-20 审查 P2）。
+     * 这里逐对问 {@link Files#isSameFile} 而不是比 {@code fileKey()}：Windows 上
+     * {@code BasicFileAttributes.fileKey()} 恒为 null（JDK 21 实测），拿它当判据等于没判。
+     * Python 侧 ({@code cli._identity}) 用设备号 + inode 问同一件事。
+     */
+    private static boolean sharesIdentity(Path target, List<Path> others) {
+        if (!Files.exists(target)) {
+            return false;
+        }
+        for (Path other : others) {
+            try {
+                if (Files.exists(other) && Files.isSameFile(target, other)) {
+                    return true;
+                }
+            } catch (IOException ignored) {
+                // 身份查不出来就按路径判，调用方已经做过。
+            }
+        }
+        return false;
     }
 
     /** 按路径身份去掉重复的输入，保持首次出现的顺序。 */
@@ -650,16 +1002,7 @@ public final class Main {
             if (!check && output != null && hasSymlinkCycle(output)) {
                 return usage("CLI002: 输出路径包含符号链接环: " + escape(output));
             }
-            if ("-".equals(deps)) {
-                // PRD 要求「依赖清单可写 stdout」；旗标本身 PRD 未规定，这里取约定的 '-'，
-                // 并且**不能**把 '-' 当成文件名写出去（发布态复核第二节）。
-                StringBuilder text = new StringBuilder();
-                for (io.github.texel.core.PxlCompiler.Dependency item : compiled.dependencies()) {
-                    text.append(item.toTsv()).append((char) 10);
-                }
-                OUT.print(text.toString());
-                OUT.flush();
-            } else if (deps != null) {
+            if (deps != null && !"-".equals(deps)) {
                 String clash = io.github.texel.core.PxlCompiler.conflictingSource(deps,
                         assetRoot.toFile(), compiled.dependencies());
                 if (clash != null) {
@@ -692,47 +1035,54 @@ public final class Main {
                     return usage("CLI002: 输出与清单指向同一路径: " + escape(output));
                 }
             }
-            if (check && deps != null && !"-".equals(deps)) {
-                // check 不产出 PNG，清单就是它唯一的产物（集成层靠 `check --deps` 收集依赖）。
-                // 非 check 时清单改到 PNG 成功之后再落盘：否则 PNG 写失败会留下
-                // "清单已更新、产物没更新"的半份状态（2026-11-14 审查 P2）。
-                int code = writeDependencies(deps, compiled.dependencies());
-                if (code != 0) {
-                    return code;
-                }
+            // 目标已存在却**不是普通文件**（目录之类）时必须现在挡住：走到改名阶段才发现的话，
+            // 两份产物里先改名的那份已经替换成功，命令失败却留下了新产物（2026-11-20 审查 P2）。
+            String badOutput = nonFileTarget(check ? null : output);
+            if (badOutput != null) {
+                return usage("输出路径" + badOutput + ": " + escape(output));
+            }
+            String badDeps = ("-".equals(deps)) ? null : nonFileTarget(deps);
+            if (badDeps != null) {
+                return usage("清单路径" + badDeps + ": " + escape(deps));
             }
             // check 也要走完整编码：只渲染不编码时，编码器的失败对 check 不可见
-            // （PRD 合同；发布态复核第二节）。
+            // （PRD 合同；发布态复核第二节）。清单必须**编码之后**才发布：先写清单再编码，
+            // 编码阶段资源不足会留下"命令失败、清单却是新的"（2026-11-20 审查 P2）。
             byte[] png = io.github.texel.core.PngEncoder.encode(compiled.width(),
                     compiled.height(), compiled.renderRgba());
             if (check) {
+                if (deps != null && !"-".equals(deps)) {
+                    // check 不产出 PNG，清单就是它唯一的产物（集成层靠 `check --deps` 收集依赖）。
+                    int code = writeDependencies(deps, compiled.dependencies());
+                    if (code != 0) {
+                        return code;
+                    }
+                }
+                if ("-".equals(deps)) {
+                    // check 不产出 PNG，清单就是它唯一的产物；`--deps -` 时必须打到 stdout，
+                    // 否则命令返回 0 却什么也没给出（Python 侧一直是打的，2026-11-20 审查 P2）。
+                    OUT.print(new String(manifestBytes(compiled.dependencies()),
+                            java.nio.charset.Charset.forName("UTF-8")));
+                    OUT.flush();
+                }
                 return 0;
             }
             Path targetFile = Paths.get(output).toAbsolutePath();
-            // 输出目录由调用方给（构建系统常把产物放进步进目录），这里负责建出来。
-            if (targetFile.getParent() != null) {
-                Files.createDirectories(targetFile.getParent());
+            Path depsFile = (deps == null || "-".equals(deps))
+                    ? null : Paths.get(deps).toAbsolutePath();
+            // 两份产物当成一次事务：都写进临时文件并刷盘之后才改名，改名失败整体回滚。
+            int published = publish(targetFile, png, depsFile,
+                    depsFile == null ? null : manifestBytes(compiled.dependencies()));
+            if (published != 0) {
+                return published;
             }
-            Path temporary = Files.createTempFile(targetFile.getParent(), ".texel-compiler-", ".tmp");
-            try {
-                Files.write(temporary, png);
-                syncFile(temporary);
-                atomicMove(temporary, targetFile);
-            } catch (IOException failure) {
-                try {
-                    Files.deleteIfExists(temporary);
-                } catch (IOException ignored) {
-                    // 同上：清理失败不掩盖原始错误。
-                }
-                ERR.println("texel-compiler: CLI003: I/O 失败: " + escape(failure.toString()));
-                return 4;
-            }
-            // PNG 已落盘，再写清单：两个产物都成功才算这条命令成功。
-            if (deps != null && !"-".equals(deps)) {
-                int code = writeDependencies(deps, compiled.dependencies());
-                if (code != 0) {
-                    return code;
-                }
+            if ("-".equals(deps)) {
+                // PRD 要求「依赖清单可写 stdout」；旗标本身 PRD 未规定，这里取约定的 '-'，
+                // 并且**不能**把 '-' 当成文件名写出去。放到产物改名之后才打：否则 PNG
+                // 写失败时清单已经在 stdout 上了，而产物一个都没更新。
+                OUT.print(new String(manifestBytes(compiled.dependencies()),
+                        java.nio.charset.Charset.forName("UTF-8")));
+                OUT.flush();
             }
             return 0;
         } catch (io.github.texel.core.PxlFormatException failure) {
@@ -757,15 +1107,25 @@ public final class Main {
     }
 
     static String usage() {
-        return "usage: texel-compiler [-o OUT] PATH...\n"
+        // 三个 CLI（texel-compiler / texel-compiler-python / texel-import）共用一套版式：
+        // `usage:` 首行 + 缩进选项表（说明列从第 22 列起）+ 最后一段中文说明，程序名用真实
+        // 命令名。改这里时另外两份帮助文本要一起改。
+        return "usage: texel-compiler capabilities --json\n"
+                + "       texel-compiler compile ENTRY --asset-root ROOT -o OUT\n"
+                + "       texel-compiler check ENTRY --asset-root ROOT\n"
+                + "       texel-compiler [-o OUT] PATH...\n"
                 + "\n"
-                + "  PATH            输入 .pxl 文件或目录(目录递归收集 *.pxl)\n"
-                + "  -o, --out OUT   输出路径(只在恰好一个输入时允许)\n"
-                + "  --              其后的参数一律当路径(文件名以 - 开头时用)\n"
+                + "  ENTRY              入口逻辑路径(相对 --asset-root),compile/check 用\n"
+                + "  --asset-root ROOT  资产根目录,compile/check 用\n"
+                + "  --bind name=value  给入口参数绑一个值,可重复\n"
+                + "  --deps FILE        写出依赖清单,FILE 为 - 时写到标准输出\n"
+                + "  -o, --out OUT      输出路径(批量模式只在恰好一个输入时允许)\n"
+                + "  PATH               输入 .pxl 文件或目录(目录递归收集 *.pxl)\n"
+                + "  --                 其后的参数一律当路径(文件名以 - 开头时用)\n"
+                + "  --json             只与 capabilities 合用:打印能力档案\n"
                 + "\n"
-                + "  capabilities --json   打印能力档案(PRD §6.3 的统一 schema)\n"
-                + "\n"
-                + "省略 -o 时,输出写到输入文件同目录、同名的 .png。\n";
+                + "省略 -o 时,批量模式把每个输入写到同目录、同名的 .png。\n"
+                + "compile 必须显式给 -o;check 不接受输出路径。\n";
     }
 
     /**

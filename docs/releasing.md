@@ -81,10 +81,9 @@ See [GitHub settings](github-settings.md) for the complete configuration.
 
 ## 2. Bump the version
 
-Update all eight release surfaces below (including the CHANGELOG section).
-`python tools/check_release_metadata.py` checks the shared metadata; also update
-`__version__`, the three version assertions in `tests/test_public_release.py`,
-and the compiler-version assertion in `tests/test_capabilities.py`:
+Update all six version surfaces below, plus the CHANGELOG section.
+`python tools/check_release_metadata.py` reads every one of them and fails if any
+disagrees with `VERSION`:
 
 - `VERSION`
 - `pyproject.toml`, `compiler/python/pyproject.toml`
@@ -92,6 +91,10 @@ and the compiler-version assertion in `tests/test_capabilities.py`:
 - `compiler/python/texel_compiler/__init__.py` (`__version__`)
 - `compiler/java/cli/src/main/java/io/github/texel/cli/Capabilities.java`
 - `spec/conformance/capabilities/pxl-v1.json`
+
+No test needs editing for a bump: `tests/test_capabilities.py` and
+`tests/test_public_release.py` derive the expected version from `VERSION`, and
+`tests/test_release_metadata.py` runs the gate itself.
 
 Add a `## [X.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md`; the GitHub Release body
 is generated from exactly that section, so it must be self-contained and readable
@@ -103,6 +106,8 @@ Run the full verification from `AGENTS.md`, on Linux and Windows, plus:
 
 ```console
 python tools/release_notes.py                     # the body that will be published
+python tools/release_probes.py pypi --project texel-importer --version "$(cat VERSION)"
+python tools/check_release_assets.py dist/release --version "$(cat VERSION)"  # the fixed asset set
 python -m build --outdir dist/importer .
 python -m build --outdir dist/compiler compiler/python
 ```
