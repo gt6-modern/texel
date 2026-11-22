@@ -524,8 +524,12 @@ class Session(object):
         return entry + rest
 
 
-def compile_target(entry, resolver, bindings=None):
-    """编译一个 target。entry 是逻辑路径;bindings 是 name -> JSON 值/字符串。"""
+def _load_graph(entry, resolver, bindings=None):
+    """相位 A:规范化入口逻辑路径并解析依赖图。不判预算,**一个像素都不写**。
+
+    单独一层是为了让"只解析、不渲染"成为可复用的入口(`dependency_manifest`):批量
+    入口要在任何写入之前收齐全批的依赖清单,而它拿不到、也不需要位图。
+    """
     if not isinstance(entry, str) or not entry:
         raise PxlError("PXL008", "入口逻辑路径为空", ["<入口>"])
     try:
@@ -533,8 +537,25 @@ def compile_target(entry, resolver, bindings=None):
     except PxlError as failure:
         raise PxlError(failure.code, failure.message, [entry])
     session = Session(resolver)
-    # 相位 A:只解析与记账,一个像素都不写。
     node = session.load_graph(entry_path, True, bindings or {})
+    return session, node, entry_path
+
+
+def dependency_manifest(entry, resolver, bindings=None):
+    """只跑相位 A,返回依赖清单:``Compiled.dependencies`` 的同一份东西(§9.4)。
+
+    批量入口需要它做**跨入口**的输出冲突检查:某个入口的输出可能落在**另一个**入口
+    读过的素材上,而依赖清单只有解析完才知道。这里不判预算、不光栅化、不产 PNG,
+    所以一次预扫不需要同时保留多份位图。
+    """
+    session, _node, entry_path = _load_graph(entry, resolver, bindings)
+    return session.manifest(entry_path)
+
+
+def compile_target(entry, resolver, bindings=None):
+    """编译一个 target。entry 是逻辑路径;bindings 是 name -> JSON 值/字符串。"""
+    # 相位 A:只解析与记账,一个像素都不写。
+    session, node, entry_path = _load_graph(entry, resolver, bindings)
     # 相位 B:R4。依赖图已经固定,此刻"依赖缺失"该报的早就报了(§11.2 的 R2 先于 R4)。
     session.check_budgets()
     # 相位 C:预算通过,才允许写像素。

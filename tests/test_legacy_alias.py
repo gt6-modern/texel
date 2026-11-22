@@ -9,9 +9,11 @@
 
 import os
 import shutil
+import struct
 import subprocess
 import sys
 import unittest
+import zlib
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -24,6 +26,29 @@ WORK = REPO / "tests" / "_tmp"
 #: 一份 `stamp` 了同目录 `parts/blade.pxl` 的 v1 文档：旧式批量入口曾经解析不了它。
 ASSET_CASE = REPO / "spec" / "conformance" / "v1" / "cases" / "graph-stamp-pxl"
 BATCH = WORK / "legacy_batch"
+
+
+def tiny_png():
+    """自己拼一张 1×1 红色 RGBA PNG，给"PNG 素材"那条用例做输入。"""
+    def chunk(kind, payload):
+        return (struct.pack(">I", len(payload)) + kind + payload
+                + struct.pack(">I", zlib.crc32(payload, zlib.crc32(kind)) & 0xFFFFFFFF))
+    header = struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header)
+            + chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00\xff")) + chunk(b"IEND", b""))
+
+
+MINI_DOCUMENT = ('{"format":"PXL","version":1,"encoding":"char","width":1,"height":1,'
+                 '"palette":["FF0000FF"],"layers":[{"name":"base","blend":"normal",'
+                 '"ops":[{"op":"fill","slot":1}]}]}')
+
+#: `stamp` 一张同目录的 PNG 素材：它的依赖清单里会出现 `sprite.png`。
+PNG_ASSET_DOCUMENT = (
+    '{"format":"PXL","version":1,"encoding":"char","width":1,"height":1,'
+    '"palette":["FF0000FF"],"assets":{"sprite":{"kind":"png","path":"sprite.png"}},'
+    '"layers":[{"name":"base","blend":"normal",'
+    '"ops":[{"op":"stamp","asset":"sprite","x":0,"y":0}]}]}'
+)
 
 
 def make_junction(link, target):
@@ -139,8 +164,8 @@ class LegacyBatchTest(unittest.TestCase):
     def test_output_must_not_overwrite_a_compiled_dependency(self):
         """`-o parts/blade.pxl` 会把被引用的子文档截断成 PNG —— 必须在写之前拒绝。
 
-        批量预检只知道**输入**，而依赖要编译完才拿得到；所以这一格在写之前按本次编译的
-        依赖清单再判一次。原来没有这一格：命令成功、依赖文件被就地替换（CodeRabbit 复审）。
+        批量预检只知道**输入**，而依赖要编译完才拿得到；所以先做一次"只解析不渲染"的
+        预扫，再按整批的依赖清单在写之前判。原来没有这一格：命令成功、依赖被就地替换。
         """
         dependency = self.entry.parent / "parts" / "blade.pxl"
         before = dependency.read_bytes()
@@ -148,6 +173,28 @@ class LegacyBatchTest(unittest.TestCase):
         self.assertNotEqual(0, code, "覆盖依赖必须失败")
         self.assertEqual(before, dependency.read_bytes(), "依赖不得被截断成 PNG")
         self.assertFalse((self.entry.parent / "entry.png").exists(), "被拒的批次不得产出其它产物")
+
+    def test_batch_refuses_an_output_that_overwrites_another_entry_asset(self):
+        """跨入口：`sprite.pxl` 的默认输出 `sprite.png` 正是 `entry.pxl` stamp 的素材。
+
+        预检只比"输出 vs 输入"（`sprite.png` 不是输入，所以过得去），依赖清单只有解析完
+        才知道，而逐个入口"编译完再判自己"时前面几份产物已经落盘。所以整批先做一次只解析
+        的预扫，把每个输出对**所有**入口的依赖比一遍，整批拒绝（CLI002，写任何文件之前）。
+        """
+        case = BATCH / "cross"
+        case.mkdir(parents=True)
+        (case / "sprite.png").write_bytes(tiny_png())
+        (case / "sprite.pxl").write_text(MINI_DOCUMENT, encoding="utf-8")
+        (case / "entry.pxl").write_text(PNG_ASSET_DOCUMENT, encoding="utf-8")
+        before = (case / "sprite.png").read_bytes()
+
+        code = cli_module.main([str(case)])
+
+        self.assertEqual(2, code, "输出覆盖依赖属于用法错（CLI002），不是逐文件失败")
+        self.assertEqual(before, (case / "sprite.png").read_bytes(),
+                         "被引用的 PNG 素材不得被改写成编译产物")
+        self.assertEqual([], sorted(p.name for p in case.glob("*.png") if p.name != "sprite.png"),
+                         "整批拒绝时一个新产物都不许留下")
 
     def test_empty_output_is_a_usage_error(self):
         """`-o ""` 曾被 `Path("")` 当成当前目录，然后整批失败 exit 1。"""

@@ -718,8 +718,44 @@ def _run_legacy(args):
         if ident is not None:
             target_ids.add(ident)
 
+    # 批次预扫（相位 A：只解析与记账，不产 PNG）：把整批入口的依赖清单先收齐。
+    # 某个入口的输出可能落在**另一个**入口读过的素材上（例如 `tile.pxl` 的默认输出
+    # `tile.png` 正是 `entry.pxl` stamp 的那张 PNG 素材），而依赖清单只有解析完才知道；
+    # 逐个入口"编译完再判自己"已经太晚——前面几份产物可能已经落盘。
+    broken = {}
+    manifests = []
+    for source, target in planned:
+        parent = source.absolute().parent
+        try:
+            manifest = pxlcompile.dependency_manifest(source.name, FileSystemResolver(parent))
+        except PxlError as failure:
+            broken[source] = str(source) + ": " + failure.describe()
+            continue
+        manifests.append((source, target, parent, manifest))
+
+    # 每个输出都要对**所有**入口的依赖清单比一遍，然后整批拒绝——与"输出撞输入"同一类
+    # 冲突（CLI002，写任何文件之前中止），而不是只跳过撞上的那一个。
+    conflicts = []
+    for source, target, _parent, _manifest in manifests:
+        for other_source, _other_target, other_parent, other_manifest in manifests:
+            clash = pxlcompile.conflicting_source(target, other_parent, other_manifest)
+            if clash is not None:
+                conflicts.append(str(source) + ": CLI002: 输出 " + str(target)
+                                 + " 会覆盖 " + str(other_source) + " 的编译依赖 "
+                                 + clash + "（未写入）")
+                break
+    if conflicts:
+        for message in conflicts:
+            _note(message)
+        _note("检测到 %d 处输出覆盖编译依赖，整批未写入任何文件" % len(conflicts))
+        return EXIT_USAGE
+
     failures = 0
     for source, target in planned:
+        if source in broken:
+            failures += 1
+            _note(broken[source])
+            continue
         try:
             # 旧式批量入口同样走**完整的 v1 编译管线**，asset root = 源文件所在目录。
             # 只在内存里渲染入口字节（api.render_document）拿不到 asset root，于是任何
@@ -728,17 +764,6 @@ def _run_legacy(args):
             # pxlcompile 载入每份文档时自己判 64 MiB。
             parent = source.absolute().parent
             compiled = pxlcompile.compile_target(source.name, FileSystemResolver(parent), {})
-            # 输出不得覆盖**本次编译读过的依赖**：`-o parts/blade.pxl` 会把被引用的子文档
-            # 截断成 PNG，而预检只比较输出与输入、命令还会返回成功（CodeRabbit 复审）。
-            # 依赖清单是在编译之后才拿得到的，所以这一格只能在写之前逐个入口判；判据复用
-            # `compile` 路径那一个 `conflicting_source`（真实路径 + inode 双重比较），
-            # 不另写一套。
-            clash = pxlcompile.conflicting_source(target, parent, compiled.dependencies)
-            if clash is not None:
-                failures += 1
-                _note(str(source) + ": CLI002: 输出会覆盖编译依赖 " + clash + "（未写入）: "
-                      + str(target))
-                continue
             png = pngenc.encode(compiled.width, compiled.height, compiled.rgba)
             _write_bytes(target, png)
         except PxlError as failure:

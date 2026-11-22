@@ -183,10 +183,15 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 - A rollback that cannot delete the artifact this run created now says so, naming the
   path it left on disk. Failure to unlink was swallowed, so the command reported only
   the manifest failure while a new PNG stayed behind.
-- The batch entry refuses an output that would overwrite a dependency it just compiled:
-  `-o parts/blade.pxl` used to truncate the referenced sub-document into a PNG and
-  still exit 0. The pre-flight can only see the inputs, so this is checked once each
-  entry's dependency list is known, before its artifact is written.
+- The batch entry refuses an output that would overwrite a dependency before writing anything,
+  including one read by a *different* entry of the same batch. `-o parts/blade.pxl` used to
+  truncate the referenced sub-document into a PNG and still exit 0, and a `tile.pxl` beside a
+  `tile.png` that another entry stamps would overwrite that asset with its own output. The
+  pre-flight can only compare against the inputs, so the whole batch is now parsed once without
+  rendering (`pxlcompile.dependency_manifest`, phase A only) to collect every entry's dependency
+  list, each output is compared against the union with `conflicting_source`, and a hit refuses
+  the batch with `CLI002` before the first write. The pre-scan produces no bitmaps, so it never
+  holds more than one artifact's worth of pixels.
 - `tools/check_release_metadata.py` reads `texel_compiler.__version__` too, so a bump that forgets
   the package's own `__version__` fails the gate instead of shipping a wheel whose metadata and
   runtime version disagree (#22). The bump checklist in `docs/releasing.md` names all seven files
