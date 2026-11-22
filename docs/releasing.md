@@ -83,7 +83,8 @@ See [GitHub settings](github-settings.md) for the complete configuration.
 
 Update all eight release surfaces below (including the CHANGELOG section).
 `python tools/check_release_metadata.py` checks the shared metadata; also update
-`__version__` and the three version assertions in `tests/test_public_release.py`:
+`__version__`, the three version assertions in `tests/test_public_release.py`,
+and the compiler-version assertion in `tests/test_capabilities.py`:
 
 - `VERSION`
 - `pyproject.toml`, `compiler/python/pyproject.toml`
@@ -166,7 +167,9 @@ The state machine resolves the actual remote tag commit and requires it to match
 the workflow commit. HTTP failures other than the release endpoint's 404 stop the
 run. The tag endpoint returns published releases only; drafts are discovered through
 the authenticated releases listing and checked again by release ID. Any listing
-failure also stops publication. Stderr may be empty or nonempty and is never used to infer a missing release.
+failure also stops publication. A newly created draft may briefly be absent from
+the listing: up to five readbacks, two seconds apart, are allowed before stopping.
+Creation/upload/publication commands are never automatically retried. Stderr may be empty or nonempty and is never used to infer a missing release.
 The SBOM is generated before SHA256SUMS; provenance covers all final assets,
 including SHA256SUMS. SHA256SUMS covers every payload including the SBOM.
 
