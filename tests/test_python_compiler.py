@@ -83,6 +83,25 @@ def workspace():
         shutil.rmtree(str(path), ignore_errors=True)
 
 
+def _fail_replace_on(target, calls):
+    """让目标为 ``target`` 的 ``os.replace`` 失败，并**按顺序**记下每次调用。
+
+    回滚类判据必须能证明"注入确实发生在 PNG 已经替换之后"：只断言失败后旧内容还在，
+    无法区分"回滚成功"和"改动根本没落地"（CodeRabbit 复审）。
+    """
+    original = os.replace
+
+    def spy(source, destination):
+        if os.path.abspath(str(destination)) == os.path.abspath(str(target)):
+            calls.append(("failed", str(destination)))
+            raise OSError("注入：清单改名失败")
+        result = original(source, destination)
+        calls.append(("replaced", str(destination)))
+        return result
+
+    return mock.patch.object(os, "replace", spy)
+
+
 FORBIDDEN_IN_SOURCE = (
     "import importer",
     "from importer",
@@ -330,11 +349,15 @@ class CommandLineTest(unittest.TestCase):
             self.assertIn(b"CLI004", err)
             self.assertEqual(b"OLD-PNG", png.read_bytes(), "用法错不得改动已有产物")
 
-    def test_locked_deps_rolls_back_the_png(self):
-        """改名阶段失败（清单被别的进程打开）时，PNG 必须跟着回滚。
+    def test_manifest_rename_failure_rolls_back_the_png(self):
+        """改名阶段失败时，PNG 必须跟着回滚——而且必须先证明 PNG 真的已经换过了。
 
         两份产物是**一次事务**：先各自写进临时文件并刷盘，两份都成功了才改名；改名失败就
         把已经换上去的那份退回去。否则命令失败却留下「新 PNG + 旧清单」。
+
+        失败用注入制造（而不是等平台的"打开中不可替换"），并断言调用顺序是
+        `PNG 替换成功 → 清单替换失败 → PNG 回滚`：只断言"旧内容还在"分不清"回滚成功"
+        和"根本没改过"（CodeRabbit 复审）。
         """
         with workspace() as directory:
             (directory / "entry.pxl").write_bytes(MiniDocumentTest().document())
@@ -342,15 +365,18 @@ class CommandLineTest(unittest.TestCase):
             manifest = directory / "deps.tsv"
             png.write_bytes(b"OLD-PNG")
             manifest.write_bytes(b"OLD-MANIFEST")
-            handle = open(str(manifest), "rb")
-            try:
-                code, out, err = run_cli(["compile", "entry.pxl", "--asset-root", str(directory),
-                                          "-o", str(png), "--deps", str(manifest)])
-            finally:
-                handle.close()
-            if code == 0:
-                self.skipTest("该平台允许替换被打开的文件，这条判据在本机无从验证")
-            self.assertEqual(4, code, err.decode("utf-8", "replace"))
+            calls = []
+            stream = io.StringIO()
+            with _fail_replace_on(manifest, calls):
+                with contextlib.redirect_stderr(stream):
+                    code = compiler_cli.main(["compile", "entry.pxl", "--asset-root",
+                                              str(directory), "-o", str(png),
+                                              "--deps", str(manifest)])
+            self.assertEqual(4, code, stream.getvalue())
+            self.assertEqual([("replaced", os.path.abspath(str(png))),
+                              ("failed", os.path.abspath(str(manifest)))],
+                             [(kind, os.path.abspath(path)) for kind, path in calls[:2]],
+                             "注入必须发生在 PNG 替换之后")
             self.assertEqual(b"OLD-PNG", png.read_bytes(), "改名失败时 PNG 必须回滚")
             self.assertEqual(b"OLD-MANIFEST", manifest.read_bytes(), "清单不得被改动")
             self.assertEqual([], sorted(directory.glob(".texel-*")),
@@ -471,6 +497,7 @@ class CommandLineTest(unittest.TestCase):
             self.assertEqual(1, len(kept), "恢复失败的备份必须留在目录里，实际: %r" % (kept,))
             self.assertEqual(b"OLD-PNG", kept[0].read_bytes(), "备份必须还是旧内容")
             self.assertIn("回滚失败", err, "必须把保留下来的备份路径说出来")
+            self.assertIn(str(kept[0]), err, "必须点名那份备份的路径: %r" % err)
 
     def test_target_with_other_hard_links_refuses_a_copy_backup(self):
         """硬链接备份失败且目标还有别的名字时，发布必须中止。
@@ -623,6 +650,7 @@ class CommandLineTest(unittest.TestCase):
                              "只剩「恢复失败的那一份」，其余备份必须清掉: %r" % (leftovers,))
             self.assertTrue(str(leftovers[0]).endswith(".prev"), leftovers[0])
             self.assertIn("回滚失败", err, "保留的备份路径必须说出来: %r" % err)
+            self.assertIn(str(leftovers[0]), err, "必须点名那份备份的路径: %r" % err)
 
     def test_failure_leaves_no_output(self):
         with workspace() as directory:
@@ -1523,14 +1551,13 @@ class PublishTransactionTest(unittest.TestCase):
                 self.skipTest("该文件系统不支持硬链接")
             manifest = directory / "deps.tsv"
             manifest.write_bytes(b"OLD-MANIFEST")
-            handle = open(str(manifest), "rb")
-            try:
+            calls = []
+            with _fail_replace_on(manifest, calls):
                 code, err = self._run(directory, png, manifest)
-            finally:
-                handle.close()
-            if code == 0:
-                self.skipTest("该平台允许替换被打开的文件，这条判据在本机无从验证")
             self.assertEqual(4, code, err)
+            self.assertEqual(("replaced", os.path.abspath(str(png))),
+                             (calls[0][0], os.path.abspath(calls[0][1])),
+                             "注入必须发生在 PNG 替换之后")
             self.assertTrue(os.path.samefile(str(png), str(real)),
                             "回滚必须把硬链接身份恢复，而不是换成一个新文件")
             self.assertEqual(b"OLD-REAL", real.read_bytes(), "旧内容必须原样")
@@ -1551,14 +1578,13 @@ class PublishTransactionTest(unittest.TestCase):
                 self.skipTest("本机不允许创建文件符号链接")
             manifest = directory / "deps.tsv"
             manifest.write_bytes(b"OLD-MANIFEST")
-            handle = open(str(manifest), "rb")
-            try:
+            calls = []
+            with _fail_replace_on(manifest, calls):
                 code, err = self._run(directory, png, manifest)
-            finally:
-                handle.close()
-            if code == 0:
-                self.skipTest("该平台允许替换被打开的文件，这条判据在本机无从验证")
             self.assertEqual(4, code, err)
+            self.assertEqual(("replaced", os.path.abspath(str(png))),
+                             (calls[0][0], os.path.abspath(calls[0][1])),
+                             "注入必须发生在 PNG 替换之后")
             self.assertTrue(png.is_symlink(), "回滚必须重建符号链接，而不是留下普通文件")
             self.assertEqual("real.png", os.readlink(str(png)), "链接目标必须原样")
             self.assertEqual(b"OLD-REAL", real.read_bytes(), "链接指向的文件不得被改写")
