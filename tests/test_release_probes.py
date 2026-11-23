@@ -20,6 +20,7 @@ import sys
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
+from urllib.parse import urlparse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -348,13 +349,14 @@ class PublicEndpointAuthTest(unittest.TestCase):
         headers = self.capture(lambda: probes.central_state("0.2.0"))
         self.assertEqual(4, len(headers), "四个文件各探测一次")
         for url, header in headers:
-            self.assertIn("repo1.maven.org", url)
+            # 解析出 host 再比，不做子串匹配：`evil/repo1.maven.org` 也能"包含"它。
+            self.assertEqual("repo1.maven.org", urlparse(url).hostname)
             self.assertIsNone(header, "Portal 凭据不得发给 repo1: %s" % url)
 
     def test_pypi_probe_sends_no_authorization(self):
         headers = self.capture(lambda: probes.pypi_state("texel-importer", "0.2.0"))
         self.assertEqual(1, len(headers))
-        self.assertIn("pypi.org", headers[0][0])
+        self.assertEqual("pypi.org", urlparse(headers[0][0]).hostname)
         self.assertIsNone(headers[0][1], "Portal 凭据不得发给 PyPI")
 
     def test_portal_calls_do_send_the_bearer_token(self):
@@ -463,7 +465,7 @@ class CentralRecoverTest(unittest.TestCase):
                 return (200, json.dumps({"deploymentState": state}).encode("utf-8"))
             if "/publisher/deployments" in url:
                 return (200, json.dumps({"deployments": self.deployments}).encode("utf-8"))
-            if "repo1.maven.org" in url:
+            if urlparse(url).hostname == "repo1.maven.org":
                 return self.repo
             raise AssertionError("unexpected url: " + url)
 
