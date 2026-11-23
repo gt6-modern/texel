@@ -253,56 +253,29 @@ jobs:
           CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
         shell: bash
         run: |
-          # 发布必须可重跑，而 Central 的发布是**异步**的：上传接口 201 只代表"接受了
-          # bundle"，之后还要 PENDING → VALIDATING → PUBLISHING 才到 PUBLISHED，也可能
-          # FAILED。所以判据分两层（审查 P1）：
+          # 整个"还要不要上传"的判断都在 `central-recover` 里（一段可测的代码，不是
+          # shell 分支）：上传接口 201 只代表"接受了 bundle"，之后还要 PENDING →
+          # VALIDATING → PUBLISHING 才到 PUBLISHED，也可能 FAILED，所以判据必须按**状态**
+          # 走，而不是"文件看不见就再传一遍"（审查 P1）：
           #
-          # 1. 上一次运行留下的 deployment id 还在 → 先问它的状态：
-          #    已 PUBLISHED → 跳过上传；还在进行中 → 等它 PUBLISHED 再跳过（绝不重传）；
-          #    明确 FAILED → 允许重新上传；查不出来 → job 红（"不知道"不是"没有"）。
-          # 2. 没有 id（全新一次运行）→ 问 repo1：texel-core 与 texel-cli 的 POM 与主 JAR
-          #    四个文件都在才算已发布；全 404 时再给 5 分钟等文件出现，避免"刚被接受、
-          #    还没在 repo1 可见"被当成"没发布"再传一遍。
-          if [ "${{ steps.recovered.outcome }}" = "success" ] \
-             && [ -f central-deployment/deployment-id.txt ]; then
-            id=$(tr -d '[:space:]' < central-deployment/deployment-id.txt)
-            if [ -n "$id" ]; then
-              set +e
-              python tools/release_probes.py central-status --deployment-id "$id"
-              rc=$?
-              set -e
-              case "$rc" in
-                0) echo "skip=true" >> "$GITHUB_OUTPUT"
-                   echo "上一次的部署 $id 已 PUBLISHED，跳过上传"; exit 0 ;;
-                3) echo "上一次的部署 $id 仍在进行中，先等它完成"
-                   python tools/release_probes.py central-wait --deployment-id "$id" --timeout 1800
-                   echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0 ;;
-                4) echo "上一次的部署 $id 明确 FAILED，允许重新上传" >&2 ;;
-                *) echo "无法确认上一次部署 $id 的状态，拒绝重复上传" >&2; exit 1 ;;
-              esac
-            fi
-          fi
-          # 没有保存的 id 时还有第二个窗口：Portal 已经接受了 bundle，但 artifact 还没来得及
-          # 落盘（runner 被取消/artifact 故障），重跑手里就没有 id。此时按固定的
-          # deploymentName（`texel-<tag>`，上传时就是这个名字）去 Portal 的部署列表里找回：
-          # 唯一匹配 → 接着等它；一个都没有 → 才允许上传；多个 → 无法判断，关闭失败。
-          DEPLOYMENT_NAME="texel-${GITHUB_REF_NAME}"
-          if id=$(python tools/release_probes.py central-find --name "$DEPLOYMENT_NAME"); then
-            echo "Portal 上已有同名部署 $id，先等它完成"
-            python tools/release_probes.py central-wait --deployment-id "$id" --timeout 1800
-            echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
-          else
-            find_rc=$?
-            if [ "$find_rc" -ne 3 ]; then
-              echo "无法确认 Portal 上是否已有 $DEPLOYMENT_NAME 的部署（退出码 $find_rc），拒绝重复上传" >&2
-              exit 1
-            fi
-          fi
+          # 1. 有保存的 deployment id → 问状态：已发布 → 跳过；进行中 → 等它 PUBLISHED；
+          #    明确 FAILED → 允许重新上传。
+          # 2. 没 id（Portal 已接受但 artifact 没落盘，或全新一次运行）→ 按固定名字
+          #    `texel-<tag>` 查 Portal：有 PUBLISHED → 跳过；恰好一个进行中 → 等它；
+          #    多个进行中或状态无法识别 → 关闭失败；只剩 FAILED 或没有 → 允许重新上传。
+          # 3. 最后查 repo1 的四个文件（并给刚上传的部署 5 分钟可见性时间）。
           bundle=$(find dist -name '*-central.zip' -print -quit)
           test -n "$bundle"
           version=$(basename "$bundle" | sed -e 's/^texel-//' -e 's/-central\.zip$//')
-          # 判据在 tools/release_probes.py：四个文件都要在；其它状态一律让 job 红（#20/#21）。
-          python tools/release_probes.py central --version "$version" \
+          id=""
+          if [ "${{ steps.recovered.outcome }}" = "success" ] \
+             && [ -f central-deployment/deployment-id.txt ]; then
+            id=$(tr -d '[:space:]' < central-deployment/deployment-id.txt)
+          fi
+          python tools/release_probes.py central-recover \
+            --name "texel-${GITHUB_REF_NAME}" \
+            --version "$version" \
+            --deployment-id "$id" \
             --wait-visible 300 --interval 20 >> "$GITHUB_OUTPUT"
       - name: Upload Central Portal bundle
         id: upload

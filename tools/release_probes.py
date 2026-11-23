@@ -295,9 +295,25 @@ def central_deployments(name=None, namespace=CENTRAL_NAMESPACE, fetch=None, auth
                 matches.append({"id": deployment_id,
                                 "name": deployment_name,
                                 "state": entry.get("deploymentState")})
-        if len(entries) < page_size:
-            break
-    return matches
+        if _last_page(payload, entries, page, page_size):
+            return matches
+    # 页数用尽而末页仍是满页:无法证明后面没有更多记录。返回一个"看起来完整"的结果会让
+    # 调用方把"没找到"当成"不存在"、把"一个"当成"唯一"（审查 P2）——只能关闭失败。
+    raise ProbeError("Central 部署列表读了 %d 页仍未结束，无法确认同名部署是否唯一"
+                     % max_pages)
+
+
+def _last_page(payload, entries, page, page_size):
+    """这一页是不是最后一页:优先用服务端给的总页数,否则按"满页即可能还有"判断。"""
+    if isinstance(payload, dict):
+        for holder in (payload, payload.get("page")):
+            if not isinstance(holder, dict):
+                continue
+            for key in ("totalPages", "total_pages"):
+                total = holder.get(key)
+                if isinstance(total, int):
+                    return page + 1 >= total
+    return len(entries) < page_size
 
 
 def central_deployment_state(deployment_id, fetch=None, auth=None):
@@ -331,6 +347,58 @@ def central_deployment_state(deployment_id, fetch=None, auth=None):
     if state in CENTRAL_PENDING_STATES:
         return IN_PROGRESS, "Central 部署 %s 处于 %s" % (deployment_id, state)
     raise ProbeError("Central 部署 %s 的状态无法识别:%r" % (deployment_id, state))
+
+
+def central_recover(name, version, deployment_id=None, namespace=CENTRAL_NAMESPACE,
+                    fetch=None, auth=None, wait_timeout=1800.0, wait_visible=300.0,
+                    interval=20.0, sleep=None, clock=None):
+    """重跑判据:**这个版本还需不需要上传**。
+
+    返回 ``(PUBLISHED, detail)`` = "已经发布,别再传";``(MISSING, detail)`` = "确实没有,
+    该传"。拿不准的一律抛 ``ProbeError``(关闭失败),因为"不知道"被当成"没有"就会重复部署。
+
+    判断顺序(每一格都有对应门禁):
+
+    1. 有保存的 deployment id → 问它的状态:已发布 → 别再传;进行中 → 等它 PUBLISHED;
+       明确 FAILED → 这一份没救了,继续往下判。
+    2. 没 id → 按固定的 deploymentName 问 Portal:有 PUBLISHED 的同名部署 → 别再传;
+       恰好一个进行中的 → 等它;多个进行中或状态无法识别 → 抛错;只剩 FAILED 或没有 →
+       继续往下判。
+    3. 最后问 repo1(给刚上传的部署一点可见性时间):四个文件齐了 → 已发布;否则 → 该传。
+    """
+    fetch = _resolved(fetch)
+
+    if deployment_id:
+        state, detail = central_deployment_state(deployment_id, fetch=fetch, auth=auth)
+        if state == PUBLISHED:
+            return PUBLISHED, detail
+        if state == IN_PROGRESS:
+            central_wait(deployment_id, timeout=wait_timeout, interval=interval,
+                         fetch=fetch, auth=auth, sleep=sleep, clock=clock)
+            return PUBLISHED, "部署 %s 已 PUBLISHED" % deployment_id
+        # FAILED:继续判"能不能重传"。
+
+    matches = central_deployments(name=name, namespace=namespace, fetch=fetch, auth=auth)
+    states = [(item["id"], str(item.get("state") or "").upper()) for item in matches]
+    published = [item for item in states if item[1] == "PUBLISHED"]
+    if published:
+        return PUBLISHED, "Central 上已有 PUBLISHED 的同名部署 %s" % published[0][0]
+    resumable = [item for item in states if item[1] in CENTRAL_PENDING_STATES]
+    unknown = [item for item in states
+               if item[1] not in CENTRAL_PENDING_STATES and item[1] not in ("FAILED", "PUBLISHED")]
+    if unknown:
+        raise ProbeError("同名部署里有无法识别的状态，拒绝猜测: %r" % (unknown,))
+    if len(resumable) > 1:
+        raise ProbeError("同名部署有 %d 个仍在进行中，无法判断该续哪一个: %r"
+                         % (len(resumable), [item[0] for item in resumable]))
+    if resumable:
+        central_wait(resumable[0][0], timeout=wait_timeout, interval=interval,
+                     fetch=fetch, auth=auth, sleep=sleep, clock=clock)
+        return PUBLISHED, "部署 %s 已 PUBLISHED" % resumable[0][0]
+    # 只剩 FAILED 的历史记录(或什么都没有):允许重新上传。
+
+    return central_state(version, fetch=fetch, wait=wait_visible, interval=interval,
+                         sleep=sleep, clock=clock)
 
 
 def central_wait(deployment_id, timeout=900.0, interval=20.0, fetch=None, auth=None,
@@ -377,6 +445,14 @@ def main(argv=None):
     upload = subparsers.add_parser("central-upload", help="上传 bundle,只把 deployment id 打到 stdout")
     upload.add_argument("--bundle", required=True)
     upload.add_argument("--name", required=True)
+    recover = subparsers.add_parser("central-recover", help="重跑判据:决定还需要不需要上传")
+    recover.add_argument("--name", required=True)
+    recover.add_argument("--version", required=True)
+    recover.add_argument("--deployment-id", default="")
+    recover.add_argument("--namespace", default=CENTRAL_NAMESPACE)
+    recover.add_argument("--wait-timeout", type=float, default=1800.0)
+    recover.add_argument("--wait-visible", type=float, default=300.0)
+    recover.add_argument("--interval", type=float, default=20.0)
     find = subparsers.add_parser("central-find", help="按 deploymentName 找回已有部署")
     find.add_argument("--name", required=True)
     find.add_argument("--namespace", default=CENTRAL_NAMESPACE)
@@ -392,6 +468,16 @@ def main(argv=None):
             deployment_id = central_upload(arguments.bundle, arguments.name, auth=credentials)
             sys.stdout.write(deployment_id + "\n")
             sys.stderr.write("release-probe: Central 接受了 bundle:%s\n" % deployment_id)
+            return 0
+        if arguments.command == "central-recover":
+            # 整个重跑判据是一段被测代码:`skip=` 行给工作流,说明走 stderr。
+            state, detail = central_recover(
+                arguments.name, arguments.version,
+                deployment_id=(arguments.deployment_id or "").strip() or None,
+                namespace=arguments.namespace, wait_timeout=arguments.wait_timeout,
+                wait_visible=arguments.wait_visible, interval=arguments.interval)
+            sys.stdout.write("skip=%s\n" % ("true" if state == PUBLISHED else "false"))
+            sys.stderr.write("release-probe: %s\n" % detail)
             return 0
         if arguments.command == "central-find":
             # 0 = 找到唯一一个(打印 id)/ 3 = 确实没有 / 1 = 有歧义或查不出来(关闭失败)

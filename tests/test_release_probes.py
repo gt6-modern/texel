@@ -404,6 +404,30 @@ class CentralDeploymentListTest(unittest.TestCase):
         matches = self.run_find([first, second], page_size=2)
         self.assertEqual(["id-0"], [item["id"] for item in matches])
 
+    def test_a_full_last_page_is_not_a_complete_result(self):
+        # 末页仍是满页 → 无法证明后面没有更多记录：必须关闭失败，不能返回"看起来完整"的
+        # 结果（审查 P2：会把"没找到"当成"不存在"，把"一个"当成"唯一"）。
+        always_full = lambda url, method="GET", auth=None, body=None, headers=None: (
+            200, json.dumps({"deployments": [
+                {"deploymentId": "other-%s" % url[-6:], "deploymentName": "other",
+                 "deploymentState": "PUBLISHED"}]}).encode("utf-8"))
+        with self.assertRaises(probes.ProbeError):
+            probes.central_deployments(name=self.NAME, fetch=always_full,
+                                       page_size=1, max_pages=1)
+
+    def test_server_side_total_pages_is_honoured(self):
+        def fetch(url, method="GET", auth=None, body=None, headers=None):
+            page = int(url.split("page=")[1].split("&")[0])
+            payload = {"deployments": [{"deploymentId": "id-%d" % page,
+                                        "deploymentName": "other",
+                                        "deploymentState": "PUBLISHED"}],
+                       "page": {"totalPages": 2}}
+            return (200, json.dumps(payload).encode("utf-8"))
+
+        matches = probes.central_deployments(name=self.NAME, fetch=fetch,
+                                             page_size=1, max_pages=5)
+        self.assertEqual([], matches)
+
     def test_bad_listing_is_a_probe_error(self):
         for body, status in ((b"{}", 200), (b"[]", 500), (b'{"deployments": [{}]}', 200)):
             with self.subTest(body=body, status=status):
@@ -412,6 +436,107 @@ class CentralDeploymentListTest(unittest.TestCase):
                         name=self.NAME,
                         fetch=lambda url, method="GET", auth=None, body=body,
                         status=status, **kw: (status, body))
+
+
+class CentralRecoverTest(unittest.TestCase):
+    """重跑判据的**完整控制流**（不是"YAML 里有没有那个字符串"）。
+
+    覆盖审查 P1 的具体路径：保存的 id 明确 FAILED 时必须**允许重新上传**，不能被
+    按名字找回的同一条 FAILED 记录再挡一次。
+    """
+
+    NAME = "texel-v0.2.0"
+    VERSION = "0.2.0"
+
+    class Portal(object):
+        def __init__(self, states=None, deployments=None, repo=(200, b"<x/>")):
+            self.states = states or {}
+            self.deployments = deployments or []
+            self.repo = repo
+            self.urls = []
+
+        def __call__(self, url, method="GET", auth=None, body=None, headers=None):
+            self.urls.append(url)
+            if "/publisher/status" in url:
+                deployment_id = url.split("id=", 1)[1]
+                state = self.states.get(deployment_id, "PENDING")
+                return (200, json.dumps({"deploymentState": state}).encode("utf-8"))
+            if "/publisher/deployments" in url:
+                return (200, json.dumps({"deployments": self.deployments}).encode("utf-8"))
+            if "repo1.maven.org" in url:
+                return self.repo
+            raise AssertionError("unexpected url: " + url)
+
+    def recover(self, portal, deployment_id=None):
+        clock = iter(range(0, 100000))
+        return probes.central_recover(self.NAME, self.VERSION, deployment_id=deployment_id,
+                                      fetch=portal, sleep=lambda _s: None,
+                                      clock=lambda: next(clock),
+                                      wait_timeout=60.0, wait_visible=1.0, interval=0.0)
+
+    def deployment(self, deployment_id, state):
+        return {"deploymentId": deployment_id, "deploymentName": self.NAME,
+                "deploymentState": state}
+
+    def test_saved_id_published_skips(self):
+        portal = self.Portal(states={"id-1": "PUBLISHED"})
+        state, _detail = self.recover(portal, deployment_id="id-1")
+        self.assertEqual(probes.PUBLISHED, state)
+
+    def test_saved_id_in_flight_is_waited_for(self):
+        portal = self.Portal(states={"id-1": "PUBLISHING"})
+        portal.states["id-1"] = "PUBLISHED"
+        state, _detail = self.recover(portal, deployment_id="id-1")
+        self.assertEqual(probes.PUBLISHED, state)
+
+    def test_saved_id_failed_allows_a_fresh_upload(self):
+        # 审查 P1 的原始路径：保存的 id FAILED，Portal 上也只有那条 FAILED 记录，
+        # repo1 上没有文件 → 必须判成"该传"，而不是被同一条 FAILED 挡住。
+        portal = self.Portal(states={"id-1": "FAILED"},
+                             deployments=[self.deployment("id-1", "FAILED")],
+                             repo=(404, b""))
+        state, detail = self.recover(portal, deployment_id="id-1")
+        self.assertEqual(probes.MISSING, state, detail)
+
+    def test_published_match_skips_without_any_id(self):
+        portal = self.Portal(deployments=[self.deployment("id-9", "PUBLISHED")])
+        state, _detail = self.recover(portal)
+        self.assertEqual(probes.PUBLISHED, state)
+
+    def test_single_in_flight_match_is_resumed(self):
+        portal = self.Portal(states={"id-2": "PUBLISHED"},
+                             deployments=[self.deployment("id-2", "VALIDATING")])
+        state, _detail = self.recover(portal)
+        self.assertEqual(probes.PUBLISHED, state)
+        self.assertTrue(any("/publisher/status" in url for url in portal.urls),
+                        "必须去等那个进行中的部署")
+
+    def test_only_failed_matches_allow_a_fresh_upload(self):
+        portal = self.Portal(deployments=[self.deployment("id-3", "FAILED")],
+                             repo=(404, b""))
+        state, _detail = self.recover(portal)
+        self.assertEqual(probes.MISSING, state)
+
+    def test_two_in_flight_matches_fail_closed(self):
+        portal = self.Portal(deployments=[self.deployment("id-4", "PUBLISHING"),
+                                          self.deployment("id-5", "PENDING")])
+        with self.assertRaises(probes.ProbeError):
+            self.recover(portal)
+
+    def test_unknown_state_fails_closed(self):
+        portal = self.Portal(deployments=[self.deployment("id-6", "SOMETHING-NEW")])
+        with self.assertRaises(probes.ProbeError):
+            self.recover(portal)
+
+    def test_no_deployment_and_no_files_means_upload(self):
+        portal = self.Portal(deployments=[], repo=(404, b""))
+        state, _detail = self.recover(portal)
+        self.assertEqual(probes.MISSING, state)
+
+    def test_no_deployment_but_complete_files_means_done(self):
+        portal = self.Portal(deployments=[], repo=(200, b"<x/>"))
+        state, _detail = self.recover(portal)
+        self.assertEqual(probes.PUBLISHED, state)
 
 
 class CentralDeploymentStateTest(unittest.TestCase):
@@ -564,7 +689,7 @@ class WorkflowWiringTest(unittest.TestCase):
     def test_every_registry_probe_uses_the_tool(self):
         # 只数**命令行调用**,注释里提到文件名不算接线。
         # PyPI×2 + Central(repo1)×1 + central-status×1 + central-wait×2
-        self.assertEqual(9, self.text.count("python tools/release_probes.py"),
+        self.assertEqual(5, self.text.count("python tools/release_probes.py"),
                          "每一处注册表交互都必须走 release_probes.py")
 
     def test_the_deployment_artifact_can_be_replaced(self):
@@ -575,30 +700,20 @@ class WorkflowWiringTest(unittest.TestCase):
         self.assertNotIn("--user \"$CENTRAL_USERNAME", self.text,
                          "不能用会发 Basic 的 curl --user")
 
-    def test_an_existing_deployment_is_found_before_uploading(self):
-        # 没有保存的 id 时（artifact 没落盘），必须按固定 deploymentName 先找回已存在的
-        # 部署，唯一匹配就接着等，取不到/有歧义就关闭失败（审查 P1）。
-        self.assertIn("central-find --name", self.text)
-        self.assertIn('DEPLOYMENT_NAME="texel-${GITHUB_REF_NAME}"', self.text)
-        self.assertIn('"$find_rc" -ne 3', self.text)
-
-    def test_rerun_branch_covers_every_deployment_state(self):
-        """完整重跑分支：已发布→跳过、进行中→等到完成、明确失败→允许重传、查不出→红。"""
-        for needle in ('case "$rc" in',
-                       '0) echo "skip=true"',
-                       '3) echo',
-                       '4) echo',
-                       '*) echo "无法确认',
-                       'exit 1 ;;'):
-            self.assertIn(needle, self.text, "重跑分支缺少: " + needle)
+    def test_the_rerun_decision_is_one_tested_command(self):
+        # 判断逻辑不再散在 shell 的 case 分支里：它是一段可测代码（central-recover）。
+        self.assertIn("central-recover", self.text)
+        self.assertIn('--name "texel-${GITHUB_REF_NAME}"', self.text)
+        self.assertNotIn('case "$rc" in', self.text,
+                         "重跑判据不该再写成 shell 分支")
 
     def test_central_publish_waits_for_published(self):
         # 上传接口 201 只代表"接受了 bundle":必须等部署到 PUBLISHED 才算发布完成，
         # 否则 github-release 会在 Central 最终 FAILED 之前就发布（审查 P1）。
         self.assertIn("central-wait --deployment-id", self.text)
         self.assertIn("deployment-id.txt", self.text, "deployment id 必须留存给重跑")
-        self.assertIn("central-status --deployment-id", self.text,
-                      "重跑必须先问已有部署的状态")
+        self.assertIn("central-recover", self.text,
+                      "重跑必须先按状态判断已有部署")
 
     def test_asset_set_is_verified_before_irreversible_steps(self):
         gate_at = self.text.find("tools/check_release_assets.py")

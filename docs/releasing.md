@@ -184,8 +184,12 @@ are idempotent:
   first: already `PUBLISHED` → skip the upload, still in flight → wait for it
   instead of uploading again, explicitly `FAILED` → upload again, unknown → fail
   closed. Without a saved id it asks Portal for deployments named `texel-<tag>`
-  first: exactly one match is resumed (never uploaded again), no match falls
-  through, several matches fail closed. Only then does it fall back to `repo1`, requiring **both**
+  first and decides by **state**: a `PUBLISHED` one means nothing to do, exactly
+  one still in flight is resumed and waited on, only `FAILED` history (or nothing)
+  allows a fresh upload, and several in-flight or unrecognised states fail closed.
+  If the listing cannot be read to the end within its page cap it also fails
+  closed rather than treating a truncated answer as complete. Only then does it
+  fall back to `repo1`, requiring **both**
   artifacts' POM *and* main JAR (`texel-core-X.Y.Z.pom` / `.jar`,
   `texel-cli-X.Y.Z.pom` / `.jar`), and it waits up to five minutes for a just
   accepted deployment to appear before calling the version unpublished.
