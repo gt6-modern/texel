@@ -189,10 +189,13 @@ are idempotent:
   allows a fresh upload, and several in-flight or unrecognised states fail closed.
   If the listing cannot be read to the end within its page cap it also fails
   closed rather than treating a truncated answer as complete. Only then does it
-  fall back to `repo1`, requiring **both**
-  artifacts' POM *and* main JAR (`texel-core-X.Y.Z.pom` / `.jar`,
-  `texel-cli-X.Y.Z.pom` / `.jar`), and it waits up to five minutes for a just
-  accepted deployment to appear before calling the version unpublished.
+  fall back to `repo1` and require the **whole published set** for both artifacts
+  (`texel-core` and `texel-cli`): per module the `.pom`, the main `.jar`, the
+  `-sources.jar` and the `-javadoc.jar`, plus each one's `.asc` signature - eight
+  files per artifact, sixteen in all. A version with some of them present is a partial publication and
+  fails the job naming the missing files, instead of skipping the upload. While
+  checking, it waits up to five minutes for a just accepted deployment to appear
+  before calling the version unpublished.
 - PyPI: each job probes `https://pypi.org/pypi/<project>/X.Y.Z/json` and skips the
   upload only when the version page lists **both** a wheel and an sdist; anything
   other than a confirmed 404 (TLS, DNS, 403, 429, 5xx) fails the job.

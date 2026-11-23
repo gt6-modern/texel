@@ -263,7 +263,8 @@ jobs:
           # 2. 没 id（Portal 已接受但 artifact 没落盘，或全新一次运行）→ 按固定名字
           #    `texel-<tag>` 查 Portal：有 PUBLISHED → 跳过；恰好一个进行中 → 等它；
           #    多个进行中或状态无法识别 → 关闭失败；只剩 FAILED 或没有 → 允许重新上传。
-          # 3. 最后查 repo1 的四个文件（并给刚上传的部署 5 分钟可见性时间）。
+          # 3. 最后查 repo1：两个模块各 8 个文件（POM / 主 JAR / sources / Javadoc 及各自
+          #    的 .asc 签名，共 16 个），并给刚上传的部署 5 分钟可见性时间。
           bundle=$(find dist -name '*-central.zip' -print -quit)
           test -n "$bundle"
           version=$(basename "$bundle" | sed -e 's/^texel-//' -e 's/-central\.zip$//')

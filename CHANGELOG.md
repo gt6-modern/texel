@@ -165,8 +165,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
   carries surrogates (#25). The Python compiler's batch entry had the same sort key and the same
   defect, and is fixed with it.
 - The release workflow only treats a confirmed HTTP 404 as "this version is not published", and
-  requires the whole asset set before calling a version published: PyPI's wheel *and* sdist,
-  Central's `texel-core` *and* `texel-cli`. TLS/DNS/403/429/5xx and half-published versions now
+  requires the whole asset set before calling a version published: PyPI's wheel *and* sdist, and
+  on Central both artifacts with all eight files each publishes - the `.pom`, the main `.jar`,
+  the `-sources.jar`, the `-javadoc.jar` and each one's `.asc` signature - so a version missing
+  only a sources JAR or a signature is a partial publication that names the missing files
+  instead of skipping the upload. TLS/DNS/403/429/5xx and half-published versions now
   fail the job instead of sending it on to a non-idempotent upload (#20/#21). The probes live in
   `tools/release_probes.py` so the rules are testable without the network.
 - A release asset directory must contain the fixed asset set - CLI archive, application

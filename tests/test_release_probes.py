@@ -142,23 +142,36 @@ class CentralProbeTest(unittest.TestCase):
             VERSION, fetch=self.both((404, b""), (404, b"")))
         self.assertEqual(probes.MISSING, state)
 
-    def test_missing_main_jar_is_a_partial_publication(self):
-        """POM 全在、主 JAR 缺一个，也是半发布：只看 POM 会跳过上传，版本永久缺件。"""
+    def missing_assets(self, missing):
+        """按**精确 URL** 回答:只有 ``missing`` 这一件 404,其余全 200。"""
         def fetch(url):
-            return (404, b"") if ".jar" in url else (200, b"<pom/>")
+            return (404, b"") if url.endswith("/" + missing) else (200, b"<x/>")
+        return fetch
 
-        with self.assertRaises(probes.ProbeError) as caught:
-            probes.central_state(VERSION, fetch=fetch)
-        detail = str(caught.exception)
-        self.assertIn("半发布", detail)
-        self.assertIn("主 JAR", detail)
-
-    def test_every_artifact_needs_both_files(self):
+    def test_every_published_file_is_required(self):
         def fetch(url):
             return (200, b"<x/>")
 
         state, _detail = probes.central_state(VERSION, fetch=fetch)
         self.assertEqual(probes.PUBLISHED, state)
+
+    def test_a_single_missing_file_is_reported(self):
+        # 15/16 都在、只缺一件:必须报出具体文件名,而不是 PUBLISHED（审查 #20）。
+        for artifact in probes.CENTRAL_ARTIFACTS:
+            for label, pattern in probes.CENTRAL_FILES:
+                name = pattern.format(artifact=artifact, version=VERSION)
+                with self.subTest(missing=name):
+                    with self.assertRaises(probes.ProbeError) as caught:
+                        probes.central_state(VERSION, fetch=self.missing_assets(name))
+                    detail = str(caught.exception)
+                    self.assertIn("半发布", detail)
+                    self.assertIn(name, detail, "必须点名缺的那一件: " + detail)
+
+    def test_a_missing_signature_alone_is_a_partial_publication(self):
+        name = "texel-cli-0.2.0-sources.jar.asc"
+        with self.assertRaises(probes.ProbeError) as caught:
+            probes.central_state(VERSION, fetch=self.missing_assets(name))
+        self.assertIn(name, str(caught.exception))
 
     def test_partial_publication_is_a_failure(self):
         # 审查 #20 的原始复现:texel-core 的 POM 200,texel-cli 的 POM 404。
@@ -347,7 +360,7 @@ class PublicEndpointAuthTest(unittest.TestCase):
 
     def test_repo1_probe_sends_no_authorization(self):
         headers = self.capture(lambda: probes.central_state("0.2.0"))
-        self.assertEqual(4, len(headers), "四个文件各探测一次")
+        self.assertEqual(16, len(headers), "两个模块各 8 个文件,一次扫描 16 个请求")
         for url, header in headers:
             # 解析出 host 再比，不做子串匹配：`evil/repo1.maven.org` 也能"包含"它。
             self.assertEqual("repo1.maven.org", urlparse(url).hostname)
@@ -671,8 +684,8 @@ class CentralVisibilityWaitTest(unittest.TestCase):
 
         def fetch(url, method="GET", auth=None):
             calls["n"] += 1
-            # 前两轮四个文件全 404,之后全部 200
-            return (404, b"") if calls["n"] <= 4 else (200, b"<x/>")
+            # 前两轮 16 个文件全 404,之后全部 200
+            return (404, b"") if calls["n"] <= 32 else (200, b"<x/>")
 
         state, _detail = probes.central_state(
             "0.2.0", fetch=fetch, wait=60.0, interval=0.0, sleep=lambda _s: None,
@@ -708,9 +721,11 @@ class ReleaseDocParityTest(unittest.TestCase):
         section = self.section()
         for artifact in probes.CENTRAL_ARTIFACTS:
             self.assertIn(artifact, section, "文档没提 Central 上的 " + artifact)
-        for label, pattern in probes.CENTRAL_FILES:
-            suffix = pattern.split("{version}", 1)[1]
-            self.assertIn(suffix, section, "文档没提 %s（%s）" % (label, suffix))
+        # 文档不必逐字抄 16 个文件名，但四类文件与签名这一层不能漏。
+        for keyword in (".pom", ".jar", ".asc", "sources", "javadoc"):
+            self.assertIn(keyword, section, "重跑说明没提 " + keyword)
+        self.assertIn("sixteen", section,
+                      "必须说明两个模块各 8 个文件（共 16 个）")
 
     def test_setup_section_names_the_bearer_scheme(self):
         text = self.DOC.read_text(encoding="utf-8")

@@ -38,11 +38,20 @@ CENTRAL_FILE = ("https://repo1.maven.org/maven2/io/github/gt6-modern/{artifact}/
 #: Central 上必须**全部**存在才算发布完成(releasing.md 的发布契约)。
 CENTRAL_ARTIFACTS = ("texel-core", "texel-cli")
 
-#: 每个 artifact 都必须有的文件(名字模板)。只看 POM 会把"POM 上传了、主 JAR 没上传"
-#: 的半发布当成完成,工作流随后跳过上传,那个版本就永久缺件(审查 P1)。
+#: 每个 artifact 都必须有的文件(名字模板)。这是 `centralBundle` 真正发布的东西:
+#: POM、主 JAR、sources JAR、Javadoc JAR,以及各自的 `.asc` 签名 —— 每个模块 8 个,
+#: 两个模块共 16 个。少查一类就会把半发布当成完成:例如"两套 POM 与主 JAR 都在、
+#: `texel-cli` 的 sources JAR 没上传"会被判成已发布,工作流随后跳过上传,那个版本就
+#: 永久缺件(审查 P1 / #20)。仓库自己生成的校验和文件不是 Central 上的发布物,不在表内。
 CENTRAL_FILES = (
     ("POM", "{artifact}-{version}.pom"),
+    ("POM 签名", "{artifact}-{version}.pom.asc"),
     ("主 JAR", "{artifact}-{version}.jar"),
+    ("主 JAR 签名", "{artifact}-{version}.jar.asc"),
+    ("sources JAR", "{artifact}-{version}-sources.jar"),
+    ("sources JAR 签名", "{artifact}-{version}-sources.jar.asc"),
+    ("Javadoc JAR", "{artifact}-{version}-javadoc.jar"),
+    ("Javadoc JAR 签名", "{artifact}-{version}-javadoc.jar.asc"),
 )
 
 #: PyPI 上必须**两种**都存在:wheel 与 sdist。
@@ -206,7 +215,8 @@ def _central_files_state(version, artifacts, fetch):
             name = pattern.format(artifact=artifact, version=version)
             url = CENTRAL_FILE.format(artifact=artifact, version=version, name=name)
             status, _body = fetch(url)
-            item = "%s/%s" % (artifact, label)
+            # 报出**文件名**（顺带标注是什么）：运维要按名字去 Portal 补传。
+            item = "%s（%s）" % (name, label)
             if status == 200:
                 present.append(item)
             elif status == NOT_FOUND:
@@ -215,7 +225,7 @@ def _central_files_state(version, artifacts, fetch):
                 raise ProbeError("Central 探测 %s 的 %s 返回 HTTP %d"
                                  % (artifact, label, status))
     if not absent:
-        return PUBLISHED, ("Central 上 %s %s 齐全(POM+主 JAR)"
+        return PUBLISHED, ("Central 上 %s %s 齐全(每模块 POM/主 JAR/sources/Javadoc 及签名)"
                            % ("/".join(artifacts), version)), present, absent
     if not present:
         return MISSING, ("Central 上还没有 %s %s" % ("/".join(artifacts), version)), present, absent
