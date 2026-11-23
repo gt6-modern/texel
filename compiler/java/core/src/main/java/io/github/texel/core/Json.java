@@ -295,22 +295,31 @@ final class Json {
          * {@code \\uXXXX}。代理对按<b>一个码点</b>处理——规范 §3.4 明写长度按 Unicode
          * 码点计数，{@code "\uD83D\uDE00"} 是 1 个字符。Java 的 {@code String} 里它
          * 是 2 个 char，因此后续一切长度判断都必须走 {@code codePointCount}。
+         *
+         * <p><b>孤立代理项一律在 JSON 阶段拒绝。</b>Java 的 {@code String} 允许半个代理项，
+         * 放过去就等于把"不是合法 Unicode 文本"的输入交给后续阶段——同一份文档 Python
+         * 在解析阶段就以 PXL001 拒绝，Java 却会继续跑到 PXL002/PXL004 之类的位置，同一
+         * 输入得到不同错误码（审查 #11）。三条诊断与 Python 的 {@code jsonx} 逐字相同。
          */
         private String parseUnicodeEscape() throws PxlFormatException {
             char high = readHex4();
-            if (Character.isHighSurrogate(high)
-                    && pos + 1 < src.length()
-                    && src.charAt(pos) == '\\'
-                    && src.charAt(pos + 1) == 'u') {
-                int save = pos;
-                pos += 2;
-                char low = readHex4();
-                if (Character.isLowSurrogate(low)) {
-                    return new String(new char[] {high, low});
-                }
-                pos = save;
+            if (Character.isLowSurrogate(high)) {
+                throw error("孤立的低代理项");
             }
-            return String.valueOf(high);
+            if (!Character.isHighSurrogate(high)) {
+                return String.valueOf(high);
+            }
+            if (!(pos + 1 < src.length()
+                    && src.charAt(pos) == '\\'
+                    && src.charAt(pos + 1) == 'u')) {
+                throw error("高代理项之后缺少低代理项");
+            }
+            pos += 2;
+            char low = readHex4();
+            if (!Character.isLowSurrogate(low)) {
+                throw error("代理对不完整");
+            }
+            return new String(new char[] {high, low});
         }
 
         private char readHex4() throws PxlFormatException {

@@ -87,8 +87,13 @@ class ReleaseExecutorTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.assets = self.root / 'assets'
         self.assets.mkdir()
-        (self.assets / 'payload.bin').write_bytes(b'payload')
-        (self.assets / 'SHA256SUMS').write_text(hashlib.sha256(b'payload').hexdigest() + '  payload.bin\n')
+        # publish() enforces the release contract before touching the remote page
+        # (issue #19), so the fixture is the complete asset set for v0.2.0.
+        try:
+            from tests.test_release_assets import write_release_set
+        except ImportError:      # discover -s tests puts tests/ itself on sys.path
+            from test_release_assets import write_release_set
+        write_release_set(self.assets, '0.2.0')
         self.notes = self.root / 'notes.md'
         self.notes.write_text('release notes')
 
@@ -172,6 +177,19 @@ class ReleaseExecutorTest(unittest.TestCase):
         (self.assets / 'SHA256SUMS').write_text('invalid')
         gh = FakeGh('draft')
         with self.assertRaises(ValueError):
+            self.run_release(gh)
+        self.assertEqual([], gh.mutations)
+
+    def test_incomplete_release_set_has_no_mutations(self):
+        # 清单自洽但资产集不完整:发布契约必须在**动远端之前**拦住(审查 #19)。
+        try:
+            from tests.test_release_assets import rewrite_sums
+        except ImportError:
+            from test_release_assets import rewrite_sums
+        (self.assets / 'texel-cli-0.2.0.tar.gz').unlink()
+        rewrite_sums(self.assets)
+        gh = FakeGh('draft')
+        with self.assertRaisesRegex(ValueError, 'release set is incomplete'):
             self.run_release(gh)
         self.assertEqual([], gh.mutations)
 

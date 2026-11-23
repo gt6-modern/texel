@@ -52,6 +52,21 @@ def run_cli(*args, **kwargs):
     return completed
 
 
+def make_junction(link, target):
+    """建一个指向目录的链接（Windows 用 junction，不需要管理员）。建不出来返回 False。"""
+    if os.name == "nt":
+        completed = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        return completed.returncode == 0 and Path(link).exists()
+    try:
+        os.symlink(str(target), str(link), target_is_directory=True)
+    except (OSError, NotImplementedError, AttributeError):
+        return False
+    return True
+
+
 class ResolveFailureTest(unittest.TestCase):
     """符号链接环在本机造不出来(需管理员),改用"让 resolve() 抛"钉同一批代码路径。
 
@@ -90,7 +105,7 @@ class ResolveFailureTest(unittest.TestCase):
     def test_main_reports_single_line_when_planning_fails(self):
         original = main_mod.collect_inputs
 
-        def boom(_paths):
+        def boom(_paths, _skipped=None):
             raise OSError("模拟目录枚举失败")
 
         main_mod.collect_inputs = boom
@@ -347,6 +362,67 @@ class CliTest(unittest.TestCase):
             shutil.copyfile(str(FIXTURE), str(folder / name))
         ordered = [item.name for item in collect_inputs([str(folder)])]
         self.assertEqual(["C.png", "a.png", "b.png"], ordered)
+
+    def test_directory_mode_does_not_follow_a_junction(self):
+        """§9 确定性：同一棵树不能因为本机有 junction 就多导入树外的 PNG。
+
+        Windows 的 junction **不算** `os.path.islink`，于是 `os.walk(followlinks=False)`
+        照样走进去，把给定目录之外的位图也导成 .pxl（写回树外）。compiler 的批量入口
+        有同一个洞，两边都要剪枝。
+        """
+        outside = self.workspace / "outside"
+        outside.mkdir()
+        shutil.copyfile(str(FIXTURE), str(outside / "z.png"))
+        folder = self.workspace / "tree"
+        folder.mkdir()
+        shutil.copyfile(str(FIXTURE), str(folder / "a.png"))
+        if not make_junction(folder / "link", outside):
+            self.skipTest("本机无法创建 junction/目录符号链接")
+        completed = run_cli(str(folder))
+        self.assertEqual(0, completed.returncode, completed.stderr.decode("utf-8", "replace"))
+        self.assertTrue((folder / "a.pxl").is_file())
+        self.assertFalse((outside / "z.pxl").exists(), "不得导入给定目录之外的 PNG")
+
+    def test_case_mismatched_extension_is_reported_not_silently_imported(self):
+        """`X.PNG` 在 Windows 上曾被 rglob 当成 `*.png` 收下，在 POSIX 上不会。
+
+        与 compiler 的批量入口一致：只认字面 `.png`，其余逐条报出来。
+        """
+        folder = self.workspace / "mixed"
+        folder.mkdir()
+        shutil.copyfile(str(FIXTURE), str(folder / "a.png"))
+        shutil.copyfile(str(FIXTURE), str(folder / "b.PNG"))
+        completed = run_cli(str(folder))
+        self.assertEqual(0, completed.returncode, completed.stderr.decode("utf-8", "replace"))
+        self.assertTrue((folder / "a.pxl").is_file())
+        self.assertFalse((folder / "b.pxl").exists(), "大小写不符的扩展名不得被导入")
+        stderr = completed.stderr.decode("utf-8", "replace")
+        self.assertIn("b.PNG", stderr)
+        self.assertIn("大小写", stderr)
+
+    def test_diagnostics_escape_control_characters(self):
+        """一条诊断只能占一行：参数里的换行/U+2028 必须被转义，否则后续行没有前缀。"""
+        stream = io.StringIO()
+        with contextlib.redirect_stderr(stream):
+            code = main_mod.main(["--bad" + chr(10) + "option"])
+        stderr = stream.getvalue()
+        self.assertEqual(2, code)
+        self.assertEqual(1, len(stderr.splitlines()), "必须恰好一行: %r" % stderr)
+        self.assertTrue(stderr.startswith("texel-import: "), stderr)
+        self.assertNotIn(chr(0x2028), stderr)
+
+    def test_link_like_directory_root_is_refused(self):
+        """输入根是 junction/符号链接目录时拒绝，而不是跟着链接走。"""
+        outside = self.workspace / "outside"
+        outside.mkdir()
+        shutil.copyfile(str(FIXTURE), str(outside / "z.png"))
+        link = self.workspace / "rootlink"
+        if not make_junction(link, outside):
+            self.skipTest("本机无法创建 junction/目录符号链接")
+        completed = run_cli(str(link))
+        self.assertEqual(1, completed.returncode)
+        self.assertFalse((outside / "z.pxl").exists(), "不得导入链接目标下的 PNG")
+        self.assertIn("junction", completed.stderr.decode("utf-8", "replace"))
 
     def test_refuses_overwrite_through_a_hardlink(self):
         """硬链接指向同一个 inode:`samefile` 必须认出来,否则源图会被改写。"""

@@ -45,6 +45,13 @@ public final class PngEncoder {
         if (height < 1 || height > Validator.MAX_DIMENSION) {
             throw new IllegalArgumentException("height 越界: " + height);
         }
+        long area = (long) width * (long) height;
+        if (area > Validator.MAX_AREA) {
+            // 编码器必须与解码器、与规范 §8.1/§8.3 用同一个上限：只校验单边就会写出
+            // 自己 reader 以 PXL006 拒绝的 PNG（审查 #10）。
+            throw new IllegalArgumentException("像素面积越界: " + width + "x" + height
+                    + " = " + area + " 超过 2^22");
+        }
         if (rgba == null) {
             throw new NullPointerException("rgba");
         }

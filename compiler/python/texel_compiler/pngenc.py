@@ -15,6 +15,10 @@ _LEVEL = 9
 _MEM_LEVEL = 8
 _CHUNK_LIMIT = 1 << 20
 
+#: PNG 输入侧的尺寸上限(§8.1),与 ``pngdec`` 保持一致:单边 1..65536、面积 ≤ 2^22。
+MAX_SIDE = 65536
+MAX_AREA = 1 << 22
+
 
 def _chunk(kind, payload):
     return (struct.pack(">I", len(payload)) + kind + payload
@@ -22,7 +26,18 @@ def _chunk(kind, payload):
 
 
 def encode(width, height, rgba):
-    """把 RGBA8 原始字节流编码成 PNG 文件字节。"""
+    """把 RGBA8 原始字节流编码成 PNG 文件字节。
+
+    尺寸在**写出任何字节之前**按 §8.1 校验(单边 1..65536、面积 ≤ 2^22)。不校验的
+    编码器能产出自己解不出来的 PNG —— ``pngdec.decode`` 会以 ``PXL006`` 拒绝它,于是
+    错误被推迟到下游的导入/解析阶段,而调用方已经拿到"成功"的字节(审查 #9/#10)。
+    """
+    if width < 1 or height < 1:
+        raise ValueError("宽或高为 0: %dx%d" % (width, height))
+    if width > MAX_SIDE or height > MAX_SIDE:
+        raise ValueError("宽或高超过 65536: %dx%d" % (width, height))
+    if width * height > MAX_AREA:
+        raise ValueError("面积超过 2^22: %d x %d = %d" % (width, height, width * height))
     stride = width * 4
     if len(rgba) != stride * height:
         raise ValueError("RGBA 字节流长度与尺寸不符")

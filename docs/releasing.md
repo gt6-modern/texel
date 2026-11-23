@@ -18,6 +18,9 @@ replaced: ship a patch instead.
    through ownership of the GitHub organisation).
 2. Generate a Portal **user token** (not your login password) and store it as the
    `maven-central` environment secrets `CENTRAL_USERNAME` and `CENTRAL_PASSWORD`.
+   The Portal API expects `Authorization: Bearer <base64(username:token)>` for both
+   the upload and the status query (`tools/release_probes.py` builds that one header;
+   plain HTTP Basic is *not* part of the documented contract).
 3. Create a signing key and store it as the `release` environment secrets
    `MAVEN_GPG_PRIVATE_KEY` (the whole armor, including the BEGIN/END lines) and
    `MAVEN_GPG_PASSPHRASE`.
@@ -81,17 +84,23 @@ See [GitHub settings](github-settings.md) for the complete configuration.
 
 ## 2. Bump the version
 
-Update all eight release surfaces below (including the CHANGELOG section).
-`python tools/check_release_metadata.py` checks the shared metadata; also update
-`__version__`, the three version assertions in `tests/test_public_release.py`,
-and the compiler-version assertion in `tests/test_capabilities.py`:
+The same version appears in seven files. `python tools/check_release_metadata.py`
+reads every one of them and fails if any disagrees with `VERSION`:
 
-- `VERSION`
-- `pyproject.toml`, `compiler/python/pyproject.toml`
+- `VERSION` (the source of truth)
+- `pyproject.toml`
+- `compiler/python/pyproject.toml`
 - `compiler/python/texel_compiler/capabilities.py` (`COMPILER_VERSION`)
 - `compiler/python/texel_compiler/__init__.py` (`__version__`)
 - `compiler/java/cli/src/main/java/io/github/texel/cli/Capabilities.java`
 - `spec/conformance/capabilities/pxl-v1.json`
+
+Plus the `CHANGELOG.md` section, which the gate also requires.
+
+No test needs editing for a bump: `tests/test_capabilities.py` and
+`tests/test_public_release.py` derive the expected version from `VERSION`, and
+`tests/test_release_metadata.py` runs the gate itself — including a check that
+this list still names every file the gate reads.
 
 Add a `## [X.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md`; the GitHub Release body
 is generated from exactly that section, so it must be self-contained and readable
@@ -103,8 +112,19 @@ Run the full verification from `AGENTS.md`, on Linux and Windows, plus:
 
 ```console
 python tools/release_notes.py                     # the body that will be published
+python tools/release_probes.py pypi --project texel-importer --version "$(cat VERSION)"
 python -m build --outdir dist/importer .
 python -m build --outdir dist/compiler compiler/python
+```
+
+`dist/release` is assembled by the workflow's "Assemble release assets" step, which
+also writes `SHA256SUMS`, and the SPDX SBOM comes from `anchore/sbom-action`; the
+asset-set gate (`tools/check_release_assets.py`, issue #19) runs there, after those
+steps and before anything irreversible. A local run of that gate therefore has to
+reproduce the same directory first, SBOM included — otherwise it is meant to fail:
+
+```console
+python tools/check_release_assets.py dist/release --version "$(cat VERSION)"
 ```
 
 Prove the signing key works before spending a CI round trip (this is the command
@@ -154,10 +174,31 @@ registries recorded — they must be the same bytes.
 Re-run the failed jobs of the same run rather than moving the tag. All three uploads
 are idempotent:
 
-- Central: the job probes `repo1` for `texel-core-X.Y.Z.pom` and skips the upload
-  when the version is already published.
+- Central: publishing is asynchronous. The upload endpoint returning 201 only means
+  the bundle was *accepted*; the deployment then goes `PENDING` → `VALIDATING` →
+  `PUBLISHING` before it reaches `PUBLISHED`, and can end in `FAILED`. The job
+  therefore keeps the **deployment id** (upload response body, stored as an
+  artifact), polls `/api/v1/publisher/status?id=…` until `PUBLISHED`, and fails on
+  `FAILED` or timeout — `github-release` depends on that job, so a release page is
+  never published while Central is still missing. On a rerun the saved id is asked
+  first: already `PUBLISHED` → skip the upload, still in flight → wait for it
+  instead of uploading again, explicitly `FAILED` → upload again, unknown → fail
+  closed. Without a saved id it asks Portal for deployments named `texel-<tag>`
+  first and decides by **state**: a `PUBLISHED` one means nothing to do, exactly
+  one still in flight is resumed and waited on, only `FAILED` history (or nothing)
+  allows a fresh upload, and several in-flight or unrecognised states fail closed.
+  If the listing cannot be read to the end within its page cap it also fails
+  closed rather than treating a truncated answer as complete. Only then does it
+  fall back to `repo1` and require the **whole published set** for both artifacts
+  (`texel-core` and `texel-cli`): per module the `.pom`, the main `.jar`, the
+  `-sources.jar` and the `-javadoc.jar`, plus each one's `.asc` signature - eight
+  files per artifact, sixteen in all. A version with some of them present is a partial publication and
+  fails the job naming the missing files, instead of skipping the upload. While
+  checking, it waits up to five minutes for a just accepted deployment to appear
+  before calling the version unpublished.
 - PyPI: each job probes `https://pypi.org/pypi/<project>/X.Y.Z/json` and skips the
-  upload when the version is already there.
+  upload only when the version page lists **both** a wheel and an sdist; anything
+  other than a confirmed 404 (TLS, DNS, 403, 429, 5xx) fails the job.
 - GitHub Release: HTTP 404 plus an authenticated, fully paginated listing with no matching release creates a draft; an existing draft is deleted without
   deleting its tag, then rebuilt from this run's artifacts. All asset names,
   sizes, upload states and SHA-256 digests must match before publication.

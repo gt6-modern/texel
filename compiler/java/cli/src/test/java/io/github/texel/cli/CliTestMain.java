@@ -140,6 +140,24 @@ public final class CliTestMain {
                 }
             });
 
+            run("check-with-deps-dash-prints-the-manifest", new Body() {
+                public void run() throws Exception {
+                    // check 不产出 PNG，清单就是它唯一的产物：`--deps -` 时不打 stdout 等于命令
+                    // 返回 0 却什么也没给出（Python 侧一直是打的，2026-11-20 审查 P2）。
+                    Path root = Files.createTempDirectory(workspace, "v1checkdash");
+                    Files.write(root.resolve("entry.pxl"), validDocument().getBytes(UTF8));
+                    Result result = cli("check", "entry.pxl", "--asset-root", root.toString(),
+                            "--deps", "-");
+                    check(result.exit == 0, "check 应为 0，实际 " + result.exit
+                            + " / " + result.stderr);
+                    check(!result.stdout.isEmpty(),
+                            "check --deps - 必须把依赖清单打到 stdout");
+                    check(result.stdout.contains("entry.pxl"),
+                            "清单里要有入口逻辑路径: " + result.stdout);
+                    check(result.stderr.isEmpty(), "成功路径不该有 stderr: " + result.stderr);
+                }
+            });
+
             run("v1-missing-dependency-exit-3", new Body() {
                 public void run() throws Exception {
                     Path root = Files.createTempDirectory(workspace, "v1missing");
@@ -416,6 +434,30 @@ public final class CliTestMain {
                 }
             });
 
+            run("hardlink-output-to-input-is-refused", new Body() {
+                public void run() throws Exception {
+                    // 两个路径不同、inode 相同：路径身份归不了这一类，必须问文件身份。
+                    Path directory = Files.createTempDirectory(workspace, "hardlinkin");
+                    Path source = directory.resolve("a.pxl");
+                    byte[] document = validDocument().getBytes(UTF8);
+                    Files.write(source, document);
+                    Path target = directory.resolve("a.png");
+                    try {
+                        Files.createLink(target, source);
+                    } catch (java.io.IOException failure) {
+                        return;   // 该文件系统不支持硬链接。
+                    } catch (UnsupportedOperationException failure) {
+                        return;
+                    }
+                    Result result = cli("-o", target.toString(), source.toString());
+                    check(result.exit == 2, "输出与输入同一 inode 应为 2，实际 " + result.exit
+                            + " / " + result.stderr);
+                    check(result.stderr.contains("CLI002"), "应是 CLI002: " + result.stderr);
+                    check(java.util.Arrays.equals(document, Files.readAllBytes(source)),
+                            "入口源文件不得被改写");
+                }
+            });
+
             run("out-with-directory-holding-many-files-is-usage-error", new Body() {
                 public void run() throws Exception {
                     Path directory = Files.createTempDirectory(workspace, "outdir");
@@ -445,6 +487,302 @@ public final class CliTestMain {
                     check(result.stderrLineCount() == 1, "恰好一行");
                     check(result.stderr.contains("输出路径不能为空"),
                             "应说明原因，实际: " + result.stderr);
+                }
+            });
+
+            run("deps-pointing-at-directory-keeps-the-png", new Body() {
+                public void run() throws Exception {
+                    // 清单目标是目录时必须在写任何东西之前挡住：走到改名阶段才发现的话，
+                    // PNG 已经替换成功，命令失败却留下了新产物。
+                    Path directory = Files.createTempDirectory(workspace, "depsdir");
+                    Files.write(directory.resolve("entry.pxl"), validDocument().getBytes(UTF8));
+                    Path png = directory.resolve("out.png");
+                    byte[] old = "OLD-PNG".getBytes(UTF8);
+                    Files.write(png, old);
+                    Path depsDirectory = directory.resolve("depsdir");
+                    Files.createDirectory(depsDirectory);
+                    Result result = cli("compile", "entry.pxl", "--asset-root", directory.toString(),
+                            "-o", png.toString(), "--deps", depsDirectory.toString());
+                    check(result.exit == 2, "清单路径是目录应为 2，实际 " + result.exit
+                            + " / " + result.stderr);
+                    check(java.util.Arrays.equals(old, Files.readAllBytes(png)),
+                            "用法错不得改动已有产物");
+                    check(result.stderrLineCount() == 1, "恰好一行，实际: " + result.stderr);
+                }
+            });
+
+            run("locked-deps-rolls-back-the-png", new Body() {
+                public void run() throws Exception {
+                    // 清单目标被别的进程打开时改名必然失败：这时 PNG 必须跟着回滚，
+                    // 否则命令失败却留下"新 PNG + 旧清单"。
+                    Path directory = Files.createTempDirectory(workspace, "lockeddeps");
+                    Files.write(directory.resolve("entry.pxl"), validDocument().getBytes(UTF8));
+                    Path png = directory.resolve("out.png");
+                    Path deps = directory.resolve("deps.tsv");
+                    byte[] oldPng = "OLD-PNG".getBytes(UTF8);
+                    byte[] oldDeps = "OLD-MANIFEST".getBytes(UTF8);
+                    Files.write(png, oldPng);
+                    Files.write(deps, oldDeps);
+                    java.io.RandomAccessFile handle =
+                            new java.io.RandomAccessFile(deps.toFile(), "r");
+                    Result result;
+                    try {
+                        result = cli("compile", "entry.pxl", "--asset-root", directory.toString(),
+                                "-o", png.toString(), "--deps", deps.toString());
+                    } finally {
+                        handle.close();
+                    }
+                    if (result.exit == 0) {
+                        // 该平台允许在文件被打开时替换（POSIX）：这条判据在本机无从验证。
+                        return;
+                    }
+                    check(result.exit == 4, "I/O 失败应为 4，实际 " + result.exit
+                            + " / " + result.stderr);
+                    check(java.util.Arrays.equals(oldPng, Files.readAllBytes(png)),
+                            "改名失败时 PNG 必须回滚：命令失败就等于什么都没变");
+                    check(java.util.Arrays.equals(oldDeps, Files.readAllBytes(deps)),
+                            "清单不得被改动");
+                    java.util.List<String> leftovers = new ArrayList<String>();
+                    java.nio.file.DirectoryStream<Path> stream =
+                            Files.newDirectoryStream(directory, ".texel-*");
+                    try {
+                        for (Path path : stream) {
+                            leftovers.add(path.getFileName().toString());
+                        }
+                    } finally {
+                        stream.close();
+                    }
+                    check(leftovers.isEmpty(), "临时/备份文件必须清掉，实际 " + leftovers);
+                }
+            });
+
+            run("hardlinked-png-target-keeps-its-identity", new Body() {
+                public void run() throws Exception {
+                    // 回滚只恢复内容的话，硬链接会退化成普通文件（链接关系永久丢失）。
+                    Path directory = Files.createTempDirectory(workspace, "hardlinkrollback");
+                    Files.write(directory.resolve("entry.pxl"), validDocument().getBytes(UTF8));
+                    Path real = directory.resolve("real.png");
+                    Path png = directory.resolve("out.png");
+                    byte[] old = "OLD-REAL".getBytes(UTF8);
+                    Files.write(real, old);
+                    try {
+                        Files.createLink(png, real);
+                    } catch (IOException unsupported) {
+                        return;
+                    }
+                    Path deps = directory.resolve("deps.tsv");
+                    byte[] oldDeps = "OLD-MANIFEST".getBytes(UTF8);
+                    Files.write(deps, oldDeps);
+                    java.io.RandomAccessFile handle =
+                            new java.io.RandomAccessFile(deps.toFile(), "r");
+                    Result result;
+                    try {
+                        result = cli("compile", "entry.pxl", "--asset-root", directory.toString(),
+                                "-o", png.toString(), "--deps", deps.toString());
+                    } finally {
+                        handle.close();
+                    }
+                    if (result.exit == 0) {
+                        return;
+                    }
+                    check(result.exit == 4, "应为 4，实际 " + result.exit + " / " + result.stderr);
+                    check(Files.isSameFile(png, real), "回滚必须恢复硬链接身份，而不是换个新文件");
+                    check(java.util.Arrays.equals(old, Files.readAllBytes(real)), "旧内容必须原样");
+                    check(java.util.Arrays.equals(oldDeps, Files.readAllBytes(deps)),
+                            "清单不得被改动");
+                    check(noTexelLeftovers(directory), "临时文件与备份都必须清掉");
+                }
+            });
+
+            run("symlinked-png-target-stays-a-link", new Body() {
+                public void run() throws Exception {
+                    // 回滚不能把符号链接换成一个普通文件。
+                    Path directory = Files.createTempDirectory(workspace, "symlinkrollback");
+                    Files.write(directory.resolve("entry.pxl"), validDocument().getBytes(UTF8));
+                    Path real = directory.resolve("real.png");
+                    Path png = directory.resolve("out.png");
+                    byte[] old = "OLD-REAL".getBytes(UTF8);
+                    Files.write(real, old);
+                    try {
+                        Files.createSymbolicLink(png, java.nio.file.Paths.get("real.png"));
+                    } catch (IOException unsupported) {
+                        return;
+                    } catch (UnsupportedOperationException unsupported) {
+                        return;
+                    }
+                    Path deps = directory.resolve("deps.tsv");
+                    Files.write(deps, "OLD-MANIFEST".getBytes(UTF8));
+                    java.io.RandomAccessFile handle =
+                            new java.io.RandomAccessFile(deps.toFile(), "r");
+                    Result result;
+                    try {
+                        result = cli("compile", "entry.pxl", "--asset-root", directory.toString(),
+                                "-o", png.toString(), "--deps", deps.toString());
+                    } finally {
+                        handle.close();
+                    }
+                    if (result.exit == 0) {
+                        return;
+                    }
+                    check(result.exit == 4, "应为 4，实际 " + result.exit + " / " + result.stderr);
+                    check(Files.isSymbolicLink(png), "回滚必须重建符号链接，而不是留下普通文件");
+                    check(java.nio.file.Paths.get("real.png").equals(Files.readSymbolicLink(png)),
+                            "链接目标必须原样");
+                    check(java.util.Arrays.equals(old, Files.readAllBytes(real)),
+                            "链接指向的文件不得被改写");
+                    check(noTexelLeftovers(directory), "临时文件与备份都必须清掉");
+                }
+            });
+
+            run("failed-png-write-keeps-the-manifest-off-stdout", new Body() {
+                public void run() throws Exception {
+                    Path directory = Files.createTempDirectory(workspace, "depsdash");
+                    Files.write(directory.resolve("entry.pxl"), validDocument().getBytes(UTF8));
+                    Files.write(directory.resolve("blocker"), "x".getBytes(UTF8));
+                    Result result = cli("compile", "entry.pxl", "--asset-root", directory.toString(),
+                            "-o", directory.resolve("blocker").resolve("out.png").toString(),
+                            "--deps", "-");
+                    check(result.exit == 4, "应为 4，实际 " + result.exit + " / " + result.stderr);
+                    check(result.stdout.isEmpty(),
+                            "PNG 没写出来时清单不该已经打到 stdout: " + result.stdout);
+                }
+            });
+
+            run("hardlinked-deps-and-output-are-refused", new Body() {
+                public void run() throws Exception {
+                    // 两个路径不同、inode 相同：resolve() 看不出来，Java 侧靠 Files.isSameFile。
+                    Path directory = Files.createTempDirectory(workspace, "hardlinkdeps");
+                    Files.write(directory.resolve("entry.pxl"), validDocument().getBytes(UTF8));
+                    Path png = directory.resolve("out.png");
+                    byte[] old = "OLD-PNG".getBytes(UTF8);
+                    Files.write(png, old);
+                    Path alias = directory.resolve("alias.tsv");
+                    try {
+                        Files.createLink(alias, png);
+                    } catch (IOException failure) {
+                        return;   // 该文件系统不支持硬链接：这条判据无从验证。
+                    } catch (UnsupportedOperationException failure) {
+                        return;
+                    }
+                    Result result = cli("compile", "entry.pxl", "--asset-root", directory.toString(),
+                            "-o", png.toString(), "--deps", alias.toString());
+                    check(result.exit == 2, "输出与清单是同一份内容应为 2，实际 " + result.exit
+                            + " / " + result.stderr);
+                    check(java.util.Arrays.equals(old, Files.readAllBytes(png)),
+                            "拒绝前不得改写产物");
+                }
+            });
+
+            run("single-output-publish-leaves-no-backup", new Body() {
+                public void run() throws Exception {
+                    // 单产物必须是"临时文件直接原子替换目标"：备份若靠移走目标来建立，
+                    // 中间那一刻目标路径不存在，被终止就只剩一份隐藏备份。
+                    Path directory = Files.createTempDirectory(workspace, "singleref");
+                    Files.write(directory.resolve("entry.pxl"), validDocument().getBytes(UTF8));
+                    Path png = directory.resolve("out.png");
+                    Files.write(png, "OLD-PNG".getBytes(UTF8));
+                    Result result = cli("compile", "entry.pxl", "--asset-root", directory.toString(),
+                            "-o", png.toString());
+                    check(result.exit == 0, "应为 0，实际 " + result.exit + " / " + result.stderr);
+                    java.util.List<String> leftovers = new ArrayList<String>();
+                    java.nio.file.DirectoryStream<Path> stream =
+                            Files.newDirectoryStream(directory, ".texel-*");
+                    try {
+                        for (Path path : stream) {
+                            leftovers.add(path.getFileName().toString());
+                        }
+                    } finally {
+                        stream.close();
+                    }
+                    check(leftovers.isEmpty(), "不得留下临时/备份文件，实际 " + leftovers);
+                    byte[] head = java.util.Arrays.copyOf(Files.readAllBytes(png), 4);
+                    check(java.util.Arrays.equals(
+                                    new byte[] {(byte) 0x89, (byte) 'P', (byte) 'N', (byte) 'G'}, head),
+                            "产物必须是 PNG");
+                }
+            });
+
+            run("rollback-keeps-the-backup-when-restore-fails", new Body() {
+                public void run() throws Exception {
+                    // 双重故障（提交失败 + 恢复也失败）时，备份是人工恢复的唯一退路：
+                    // 曾经它会被"没用上的备份"清理循环删掉，旧产物就此永久丢失。
+                    Path directory = Files.createTempDirectory(workspace, "rollbackkeeps");
+                    Path target = directory.resolve("out.png");
+                    Path backup = directory.resolve(".texel-x-png.tmp.prev");
+                    byte[] old = "OLD-PNG".getBytes(UTF8);
+                    Files.write(target, "NEW-PNG".getBytes(UTF8));
+                    Files.write(backup, old);
+                    java.util.List<Path> committed = new ArrayList<Path>();
+                    committed.add(target);
+                    java.util.Map<Path, Main.Backup> backups =
+                            new java.util.LinkedHashMap<Path, Main.Backup>();
+                    backups.put(target, new Main.Backup(backup));
+                    java.io.RandomAccessFile handle =
+                            new java.io.RandomAccessFile(target.toFile(), "r");
+                    java.util.List<Path> kept;
+                    try {
+                        kept = Main.rollback(committed, backups);
+                    } finally {
+                        handle.close();
+                    }
+                    if (!Files.exists(backup)) {
+                        // 该平台允许替换被打开的文件：恢复成功、备份被正常消耗。
+                        // 但"备份消失"不等于"恢复成功"——目标必须真的回到旧内容，否则
+                        // 这正是本条要防的数据丢失（CodeRabbit 复审）。
+                        check(java.util.Arrays.equals(old, Files.readAllBytes(target)),
+                                "备份已被消耗时，目标必须已恢复成旧内容");
+                        return;
+                    }
+                    check(kept.contains(backup), "恢复失败的备份必须报出来，实际: " + kept);
+                    check(java.util.Arrays.equals(old, Files.readAllBytes(backup)),
+                            "备份必须保留旧内容");
+                }
+            });
+
+            run("root-path-with-parent-segments-is-not-a-junction", new Body() {
+                public void run() throws Exception {
+                    // `dir/..` 是普通父目录引用：判据必须先把词法段归一，否则真路径与带 `..`
+                    // 的路径比较不等，普通目录会被当成 junction 拒掉（2026-11-20 审查 P2）。
+                    Path directory = Files.createTempDirectory(workspace, "dotdot");
+                    Path inner = directory.resolve("inner");
+                    Files.createDirectory(inner);
+                    Files.write(directory.resolve("a.pxl"), validDocument().getBytes(UTF8));
+                    Result result = cli(inner.resolve("..").toString());
+                    check(result.exit == 0, "dir/.. 是普通目录，应为 0，实际 " + result.exit
+                            + " / " + result.stderr);
+                    check(!result.stderr.contains("junction"),
+                            "普通父目录引用不得被当成链接: " + result.stderr);
+                    check(Files.exists(directory.resolve("a.png")), "应产出 a.png");
+                }
+            });
+
+            run("check-deps-file-is-published-only-after-encoding", new Body() {
+                public void run() throws Exception {
+                    // check 失败（这里是堆不够，失败点落在编译/编码阶段）不得留下**新的**依赖清单。
+                    // 注意：本机实测这种 OOM 发生在清单写入之前，所以这条用例**分不出**"编码前后"
+                    // 两种顺序；顺序本身由 tests/test_cli_identity.py 的源码顺序断言钉住。
+                    // 4 M 像素、char 编码：48 MiB 堆下编码阶段必然 OOM（实测），正好检验顺序。
+                    Path root = Files.createTempDirectory(workspace, "checkorder");
+                    String document = "{\"format\":\"PXL\",\"version\":1,"
+                            + "\"encoding\":\"char\",\"width\":2048,\"height\":2048,"
+                            + "\"palette\":[\"FF0000FF\"],\"layers\":[{\"name\":\"b\","
+                            + "\"blend\":\"normal\",\"ops\":[{\"op\":\"fill\",\"slot\":0}]}]}";
+                    Files.write(root.resolve("entry.pxl"), document.getBytes(UTF8));
+                    Path manifest = root.resolve("deps.tsv");
+                    List<String> options = new ArrayList<String>();
+                    options.add("-Xmx48m");
+                    Result result = cliIn(root, options, "check", "entry.pxl",
+                            "--asset-root", root.toString(), "--deps", manifest.toString());
+                    if (result.exit == 0) {
+                        // 这台机器/这个堆设置下编码没失败：判据无从验证，但成功路径必须有清单。
+                        check(Files.exists(manifest), "成功的 check 必须写出清单");
+                        return;
+                    }
+                    check(result.stderr.contains("CLI001"),
+                            "这条判据依赖编码阶段的内存失败，实际: " + result.stderr);
+                    check(!Files.exists(manifest),
+                            "check 失败时不得留下新的依赖清单，实际 exit " + result.exit
+                                    + " / " + result.stderr);
                 }
             });
 
@@ -486,6 +824,28 @@ public final class CliTestMain {
                     Path directory = Files.createTempDirectory(workspace, "empty");
                     Result result = cli(directory.toString());
                     check(result.exit == 2, "没有 .pxl 的目录应为 2，实际 " + result.exit);
+                }
+            });
+
+            run("directory-mode-does-not-follow-a-junction", new Body() {
+                public void run() throws Exception {
+                    // walkFileTree 的默认只挡**符号链接**；Windows 的 junction 不算符号链接，
+                    // 会被当成普通目录走进去，于是给定目录**之外**的 .pxl 也被编译出 PNG。
+                    // Python 侧曾有同一个洞（那边靠 os.walk(followlinks=False)，同样只认
+                    // islink），两边现在都剪枝。
+                    Path tree = Files.createTempDirectory(workspace, "junctiontree");
+                    Path outside = Files.createTempDirectory(workspace, "junctionoutside");
+                    Files.write(tree.resolve("a.pxl"), validDocument().getBytes(UTF8));
+                    Files.write(outside.resolve("z.pxl"), validDocument().getBytes(UTF8));
+                    if (!createJunction(tree.resolve("link"), outside)) {
+                        // 非 Windows 或本机不许建链接：这条判据在本机无从验证。
+                        return;
+                    }
+                    Result result = cli(tree.toString());
+                    check(result.exit == 0, "应为 0，实际 " + result.exit + " / " + result.stderr);
+                    check(Files.exists(tree.resolve("a.png")), "树内的 a.pxl 要产出 PNG");
+                    check(!Files.exists(outside.resolve("z.png")),
+                            "不得编译给定目录之外的 .pxl（junction 被跟随了）");
                 }
             });
 
@@ -564,6 +924,7 @@ public final class CliTestMain {
                     check(occurrences == 1, "错误码只能出现一次，实际 " + occurrences + " 次: " + text);
                 }
             });
+            batchDependencyConflicts();
         } finally {
             deleteTree(workspace);
         }
@@ -611,6 +972,84 @@ public final class CliTestMain {
         }
     }
 
+    /** 批量入口：输出落到**自己**（或别的入口）读过的依赖上时必须整批拒绝（审查 P1）。 */
+    private static void batchDependencyConflicts() {
+        run("v1-batch-output-must-not-overwrite-a-dependency", new Body() {
+            public void run() throws Exception {
+                Path root = Files.createTempDirectory(workspace, "v1batchdep");
+                Files.write(root.resolve("sprite.png"),
+                        io.github.texel.core.PngEncoder.encode(2, 2, new byte[2 * 2 * 4]));
+                Files.write(root.resolve("sprite.pxl"),
+                        v1EntryWithAsset("png", "sprite.png").getBytes(UTF8));
+                byte[] before = Files.readAllBytes(root.resolve("sprite.png"));
+                Result result = cli("-o", root.resolve("sprite.png").toString(),
+                        root.resolve("sprite.pxl").toString());
+                check(result.exit == 2, "输出覆盖依赖属于 CLI002（exit 2），实际 " + result.exit
+                        + " / " + result.stderr);
+                check(result.stderr.contains("CLI002"), "必须有 CLI002: " + result.stderr);
+                check(result.stderr.contains("整批未写入任何文件"), "必须有整批未写入的说明: " + result.stderr);
+                check(java.util.Arrays.equals(before, Files.readAllBytes(root.resolve("sprite.png"))),
+                        "被引用的素材不得被改写成编译产物");
+            }
+        });
+        run("v1-rollback-reports-artifact-it-cannot-delete", new Body() {
+            public void run() throws Exception {
+                // 目标原先不存在时，回滚就是删掉这份新产物；删不掉必须点名，
+                // 否则命令失败、磁盘上留着新 PNG 而调用者不知道（审查 P1）。
+                Path root = Files.createTempDirectory(workspace, "v1stray");
+                Path target = root.resolve("out.png");
+                Files.createDirectories(target);
+                Files.write(target.resolve("keep"), new byte[] {1});
+                java.util.List<Path> committed = new ArrayList<Path>();
+                committed.add(target);
+                java.util.Map<Path, Main.Backup> backups =
+                        new java.util.LinkedHashMap<Path, Main.Backup>();
+                java.util.List<Path> stray = new ArrayList<Path>();
+                java.util.List<Path> kept = Main.rollback(committed, backups, stray);
+                check(kept.isEmpty(), "没有备份可保留，实际: " + kept);
+                check(stray.size() == 1 && stray.get(0).equals(target),
+                        "删不掉的新产物必须记账，实际: " + stray);
+            }
+        });
+        run("v1-batch-oversized-entry-keeps-pxl002", new Body() {
+            public void run() throws Exception {
+                // 预扫的 best-effort 清单不能把"文档太大"改写成"清单缺少入口行"/CLI001（审查 P2）。
+                Path root = Files.createTempDirectory(workspace, "v1batchbig");
+                Path entry = root.resolve("entry.pxl");
+                createSparse(entry, io.github.texel.core.PxlParser.maxDocumentBytes() + 1L,
+                        "{}".getBytes(UTF8));
+                Result result = cli(root.toString());
+                check(result.exit != 0, "超大入口必须失败");
+                check(result.stderr.contains("PXL002"), "必须保留原始的 PXL002: " + result.stderr);
+                check(!result.stderr.contains("清单缺少入口行"),
+                        "不得把 PXL002 盖成清单错误: " + result.stderr);
+                check(!result.stderr.contains("CLI001"), "不得报成宿主 I/O: " + result.stderr);
+            }
+        });
+        run("v1-batch-failed-entry-blocks-every-write", new Body() {
+            public void run() throws Exception {
+                // 一个入口解析失败时，我们不知道它的完整依赖集（PNG 素材要到后面的阶段才读），
+                // 所以整批不写：否则同批另一个入口的输出会把它依赖的素材改成 PNG（审查 P1）。
+                Path root = Files.createTempDirectory(workspace, "v1batchfailed");
+                Files.write(root.resolve("sprite.png"),
+                        io.github.texel.core.PngEncoder.encode(2, 2, new byte[2 * 2 * 4]));
+                byte[] before = Files.readAllBytes(root.resolve("sprite.png"));
+                // entry.pxl 引用一个不存在的 pxl 素材（解析阶段就失败）
+                Files.write(root.resolve("entry.pxl"),
+                        v1EntryWithAsset("pxl", "parts/missing.pxl").getBytes(UTF8));
+                // sprite.pxl 是个**不引用任何素材**的普通文档，默认输出正是 sprite.png
+                Files.write(root.resolve("sprite.pxl"), simpleDocument().getBytes(UTF8));
+                Result result = cli(root.toString());
+                check(result.exit == 1, "解析失败是批处理失败（exit 1），实际 " + result.exit
+                        + " / " + result.stderr);
+                check(result.stderr.contains("PXL009"), "必须报出缺失依赖: " + result.stderr);
+                check(result.stderr.split("\n").length == 1, "每条错误恰好一行: " + result.stderr);
+                check(java.util.Arrays.equals(before, Files.readAllBytes(root.resolve("sprite.png"))),
+                        "素材不得被同批另一个入口改写");
+                check(!Files.exists(root.resolve("sprite.png.tmp")), "不得留下临时文件");
+            }
+        });
+    }
     private static String v1EntryWithAsset(String kind, String path) {
         return "{\"format\":\"PXL\",\"version\":1,\"width\":2,\"height\":2,"
                 + "\"encoding\":\"char\",\"palette\":[\"FFFFFFFF\"],"
@@ -629,6 +1068,14 @@ public final class CliTestMain {
         } finally {
             file.close();
         }
+    }
+
+    /** 一个不引用任何素材的最小文档（批量用例里当"健康入口"）。 */
+    private static String simpleDocument() {
+        return "{\"format\":\"PXL\",\"version\":1,\"width\":2,\"height\":2,"
+                + "\"encoding\":\"char\",\"palette\":[\"FFFFFFFF\"],"
+                + "\"layers\":[{\"name\":\"base\",\"blend\":\"normal\",\"ops\":"
+                + "[{\"op\":\"fill\",\"slot\":1}]}]}";
     }
 
     /** 一个最小 v1 入口：stamp 一个 PXL asset。 */
@@ -815,6 +1262,47 @@ public final class CliTestMain {
             });
         } catch (IOException ignored) {
             // 清理失败不影响判定。
+        }
+    }
+
+    /** 目录里是否没有 .texel-* 残留（暂存文件、回滚备份）。 */
+    private static boolean noTexelLeftovers(Path directory) throws IOException {
+        java.nio.file.DirectoryStream<Path> stream =
+                Files.newDirectoryStream(directory, ".texel-*");
+        try {
+            return !stream.iterator().hasNext();
+        } finally {
+            stream.close();
+        }
+    }
+
+    /** 建一个指向目录的链接（Windows 用 junction，无需管理员）；建不出来返回 false。 */
+    private static boolean createJunction(Path link, Path target) {
+        String os = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT);
+        if (os.contains("win")) {
+            try {
+                ProcessBuilder builder = new ProcessBuilder("cmd", "/c", "mklink", "/J",
+                        link.toString(), target.toString());
+                builder.redirectErrorStream(true);
+                Process process = builder.start();
+                read(process.getInputStream());
+                process.waitFor();
+            } catch (IOException failure) {
+                return false;
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+            return Files.exists(link);
+        }
+        try {
+            // POSIX 下用符号链接走同一条判据（walkFileTree 默认就不跟随符号链接）。
+            Files.createSymbolicLink(link, target);
+            return true;
+        } catch (IOException failure) {
+            return false;
+        } catch (UnsupportedOperationException failure) {
+            return false;
         }
     }
 

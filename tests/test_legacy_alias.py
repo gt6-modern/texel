@@ -7,8 +7,15 @@
 输出写到 tests/_tmp（本目录由测试自己创建并清理），不碰夹具本身。
 """
 
+import io
+import os
+import shutil
+import struct
+import subprocess
 import sys
 import unittest
+import zlib
+from contextlib import redirect_stderr
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -18,6 +25,59 @@ from texel_compiler import cli as cli_module  # noqa: E402
 
 FIXTURE = REPO / "tests" / "fixtures" / "legacy" / "entry.pxl"
 WORK = REPO / "tests" / "_tmp"
+#: 一份 `stamp` 了同目录 `parts/blade.pxl` 的 v1 文档：旧式批量入口曾经解析不了它。
+ASSET_CASE = REPO / "spec" / "conformance" / "v1" / "cases" / "graph-stamp-pxl"
+BATCH = WORK / "legacy_batch"
+
+
+def tiny_png():
+    """自己拼一张 1×1 红色 RGBA PNG，给"PNG 素材"那条用例做输入。"""
+    def chunk(kind, payload):
+        return (struct.pack(">I", len(payload)) + kind + payload
+                + struct.pack(">I", zlib.crc32(payload, zlib.crc32(kind)) & 0xFFFFFFFF))
+    header = struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header)
+            + chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00\xff")) + chunk(b"IEND", b""))
+
+
+MINI_DOCUMENT = ('{"format":"PXL","version":1,"encoding":"char","width":1,"height":1,'
+                 '"palette":["FF0000FF"],"layers":[{"name":"base","blend":"normal",'
+                 '"ops":[{"op":"fill","slot":1}]}]}')
+
+#: `stamp` 一张同目录的 PNG 素材：它的依赖清单里会出现 `sprite.png`。
+PNG_ASSET_DOCUMENT = (
+    '{"format":"PXL","version":1,"encoding":"char","width":1,"height":1,'
+    '"palette":["FF0000FF"],"assets":{"sprite":{"kind":"png","path":"sprite.png"}},'
+    '"layers":[{"name":"base","blend":"normal",'
+    '"ops":[{"op":"stamp","asset":"sprite","x":0,"y":0}]}]}'
+)
+
+#: 先 stamp `sprite.png`、随后因为缺 `missing.pxl` 失败：相位 A 在读 png 素材之前就炸，
+#: 所以失败入口"已经读过什么"补不出它对 `sprite.png` 的依赖。
+READ_THEN_FAIL_DOCUMENT = (
+    '{"format":"PXL","version":1,"encoding":"char","width":1,"height":1,'
+    '"palette":["FF0000FF"],'
+    '"assets":{"sprite":{"kind":"png","path":"sprite.png"},'
+    '"gone":{"kind":"pxl","path":"missing.pxl"}},'
+    '"layers":[{"name":"base","blend":"normal","ops":['
+    '{"op":"stamp","asset":"sprite","x":0,"y":0},'
+    '{"op":"stamp","asset":"gone","x":0,"y":0}]}]}'
+)
+
+
+def make_junction(link, target):
+    """建一个指向目录的链接（Windows 用 junction，不需要管理员）。建不出来返回 False。"""
+    if os.name == "nt":
+        completed = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        return completed.returncode == 0 and Path(link).exists()
+    try:
+        os.symlink(str(target), str(link), target_is_directory=True)
+    except (OSError, NotImplementedError, AttributeError):
+        return False
+    return True
 
 
 class LegacyAliasTest(unittest.TestCase):
@@ -27,7 +87,7 @@ class LegacyAliasTest(unittest.TestCase):
 
     def tearDown(self):
         self.assertEqual(self.before, FIXTURE.read_bytes(), "夹具源文件不得被改写")
-        for leftover in WORK.glob("legacy-*.png"):
+        for leftover in list(WORK.glob("legacy-*.png")) + list(WORK.glob("legacy-*.pxl")):
             leftover.unlink()
 
     def test_output_equal_to_input_is_rejected(self):
@@ -45,11 +105,259 @@ class LegacyAliasTest(unittest.TestCase):
             if second.exists():
                 second.unlink()
 
+    def test_output_hardlinked_to_the_input_is_refused(self):
+        """`-o entry.png entry.pxl`（entry.png 是入口的硬链接）曾退出 0 并把入口改写成 PNG。
+
+        两个路径不同、inode 相同：`resolve()` 归一不了这一类，必须问文件身份（Java 侧
+        用的是 `BasicFileAttributes.fileKey()`）。
+        """
+        target = WORK / "legacy-hardlink.png"
+        try:
+            os.link(str(FIXTURE), str(target))
+        except OSError:
+            self.skipTest("该文件系统不支持硬链接")
+        code = cli_module.main(["-o", str(target), str(FIXTURE)])
+        self.assertEqual(2, code, "输出与输入是同一个 inode，必须按用法错拒绝")
+        self.assertEqual(self.before, FIXTURE.read_bytes(), "入口源文件不得被改写")
+
+    def test_two_outputs_hardlinked_to_each_other_are_refused(self):
+        """同批两个输出互为硬链接时，后写的那份会盖掉前一份。"""
+        first = WORK / "legacy-a.pxl"
+        second = WORK / "legacy-b.pxl"
+        first.write_bytes(self.before)
+        second.write_bytes(self.before)
+        first_target = WORK / "legacy-a.png"
+        first_target.write_bytes(b"sentinel")
+        try:
+            os.link(str(first_target), str(WORK / "legacy-b.png"))
+        except OSError:
+            self.skipTest("该文件系统不支持硬链接")
+        code = cli_module.main([str(first), str(second)])
+        self.assertEqual(2, code, "两个输出是同一个 inode，必须按用法错拒绝")
+        self.assertEqual(b"sentinel", first_target.read_bytes(), "既有产物不得被改写")
+
     def test_normal_legacy_render_still_works(self):
         target = WORK / "legacy-ok.png"
         code = cli_module.main(["-o", str(target), str(FIXTURE)])
         self.assertEqual(0, code)
         self.assertTrue(target.is_file(), "正常路径仍要产物")
+
+
+class LegacyBatchTest(unittest.TestCase):
+    """旧式批量入口必须与 Java 的**同形**入口给出同样结果。
+
+    2026-11-20 审查的三条实测缺陷都在这条入口上：asset 解析、`-o` 准入分类、目录展开。
+    """
+
+    def setUp(self):
+        if BATCH.exists():
+            shutil.rmtree(BATCH)
+        BATCH.mkdir(parents=True)
+        shutil.copytree(str(ASSET_CASE), str(BATCH / "case"))
+        self.entry = BATCH / "case" / "entry.pxl"
+
+    def tearDown(self):
+        if BATCH.exists():
+            shutil.rmtree(BATCH, ignore_errors=True)
+
+    def test_batch_resolves_assets_relative_to_the_source_directory(self):
+        """带 asset 的 v1 文档曾报 PXL009「依赖缺失」，而 Java 侧同一个文件能编译。
+
+        旧实现走 `api.render_document`（只有入口字节的内存 resolver），拿不到 asset
+        root；Java 的批量入口用的是「源文件所在目录」。
+        """
+        code = cli_module.main([str(self.entry)])
+        self.assertEqual(0, code, "旧式批量入口必须能解析源文件同目录的 asset")
+        self.assertTrue((self.entry.parent / "entry.png").is_file(), "要产出 PNG")
+
+    def test_output_pointing_at_a_directory_is_a_usage_error(self):
+        """`-o <已存在目录>` 曾 exit 1，并把内部临时文件名印给使用者（Java 侧 exit 2）。"""
+        code = cli_module.main(["-o", str(self.entry.parent), str(self.entry)])
+        self.assertEqual(2, code, "输出路径是目录属于用法错，不是某个文件处理失败")
+
+    def test_output_must_not_overwrite_a_compiled_dependency(self):
+        """`-o parts/blade.pxl` 会把被引用的子文档截断成 PNG —— 必须在写之前拒绝。
+
+        批量预检只知道**输入**，而依赖要编译完才拿得到；所以先做一次"只解析不渲染"的
+        预扫，再按整批的依赖清单在写之前判。原来没有这一格：命令成功、依赖被就地替换。
+        """
+        dependency = self.entry.parent / "parts" / "blade.pxl"
+        before = dependency.read_bytes()
+        code = cli_module.main(["-o", str(dependency), str(self.entry)])
+        self.assertNotEqual(0, code, "覆盖依赖必须失败")
+        self.assertEqual(before, dependency.read_bytes(), "依赖不得被截断成 PNG")
+        self.assertFalse((self.entry.parent / "entry.png").exists(), "被拒的批次不得产出其它产物")
+
+    def test_batch_refuses_an_output_that_overwrites_another_entry_asset(self):
+        """跨入口：`sprite.pxl` 的默认输出 `sprite.png` 正是 `entry.pxl` stamp 的素材。
+
+        预检只比"输出 vs 输入"（`sprite.png` 不是输入，所以过得去），依赖清单只有解析完
+        才知道，而逐个入口"编译完再判自己"时前面几份产物已经落盘。所以整批先做一次只解析
+        的预扫，把每个输出对**所有**入口的依赖比一遍，整批拒绝（CLI002，写任何文件之前）。
+        """
+        case = BATCH / "cross"
+        case.mkdir(parents=True)
+        (case / "sprite.png").write_bytes(tiny_png())
+        (case / "sprite.pxl").write_text(MINI_DOCUMENT, encoding="utf-8")
+        (case / "entry.pxl").write_text(PNG_ASSET_DOCUMENT, encoding="utf-8")
+        before = (case / "sprite.png").read_bytes()
+
+        code = cli_module.main([str(case)])
+
+        self.assertEqual(2, code, "输出覆盖依赖属于用法错（CLI002），不是逐文件失败")
+        self.assertEqual(before, (case / "sprite.png").read_bytes(),
+                         "被引用的 PNG 素材不得被改写成编译产物")
+        self.assertEqual([], sorted(p.name for p in case.glob("*.png") if p.name != "sprite.png"),
+                         "整批拒绝时一个新产物都不许留下")
+
+    def test_failed_entry_blocks_the_whole_batch(self):
+        """预扫就失败的入口让整批不写：我们不知道它的完整依赖集。
+
+        相位 A 在读 PNG 素材之前就会因为缺 `missing.pxl` 失败，所以"失败入口已经读过
+        什么"补不出它对 `sprite.png` 的依赖。若照旧写同批的健康入口，`sprite.pxl` 的默认
+        输出 `sprite.png` 就会把那份素材改写成编译产物，而命令只是失败退出（审查 P1）。
+        """
+        case = BATCH / "failed"
+        case.mkdir(parents=True)
+        (case / "sprite.png").write_bytes(tiny_png())
+        (case / "entry.pxl").write_text(READ_THEN_FAIL_DOCUMENT, encoding="utf-8")
+        (case / "sprite.pxl").write_text(MINI_DOCUMENT, encoding="utf-8")
+        before = (case / "sprite.png").read_bytes()
+
+        stream = io.StringIO()
+        with redirect_stderr(stream):
+            code = cli_module.main([str(case)])
+
+        self.assertEqual(1, code, "解析失败属于批处理失败，不是用法错")
+        self.assertEqual(before, (case / "sprite.png").read_bytes(), "素材不得被改写成产物")
+        self.assertEqual([], sorted(p.name for p in case.glob("*.png") if p.name != "sprite.png"),
+                         "整批未写入时一个新产物都不许留下")
+        lines = stream.getvalue().splitlines()
+        self.assertEqual(1, len(lines), "每条错误恰好一行: %r" % (lines,))
+        self.assertIn("PXL009", lines[0])
+
+    def test_conflict_and_failure_are_both_reported(self):
+        """同一批里既有冲突又有解析失败时，两条都要说出来。
+
+        冲突是用法错（exit 2），但"某个入口本身坏了"不该被它藏起来：否则使用者修完
+        冲突再跑一轮才发现还有一个坏文件（审查 P1 的邻居问题）。
+        """
+        case = BATCH / "both"
+        case.mkdir(parents=True)
+        (case / "sprite.png").write_bytes(tiny_png())
+        (case / "broken.pxl").write_text(READ_THEN_FAIL_DOCUMENT, encoding="utf-8")
+        (case / "sprite.pxl").write_text(PNG_ASSET_DOCUMENT, encoding="utf-8")
+
+        stream = io.StringIO()
+        with redirect_stderr(stream):
+            code = cli_module.main([str(case)])
+
+        err = stream.getvalue()
+        self.assertEqual(2, code, "有冲突时是用法错: %r" % err)
+        self.assertIn("missing.pxl", err, "解析失败必须报出来: %r" % err)
+        self.assertIn("CLI002", err, "冲突必须报出来: %r" % err)
+
+    def test_prescan_host_io_error_is_a_batch_failure(self):
+        """预扫里的宿主读盘失败（依赖被锁定）是逐文件失败，不是用法错。
+
+        只接 `PxlError` 时 `OSError` 会落到顶层兜底并返回 2（审查 P2）。
+        """
+        from texel_compiler import pxlcompile
+        from unittest import mock
+
+        case = BATCH / "prescan-io"
+        case.mkdir(parents=True)
+        (case / "entry.pxl").write_text(MINI_DOCUMENT, encoding="utf-8")
+
+        def locked(*arguments, **keywords):
+            raise PermissionError("locked")
+
+        stream = io.StringIO()
+        with mock.patch.object(pxlcompile, "best_effort_manifest", locked):
+            with redirect_stderr(stream):
+                code = cli_module.main([str(case)])
+        self.assertEqual(1, code, "宿主 I/O 失败应是批处理失败（exit 1）")
+        self.assertIn("I/O 失败", stream.getvalue())
+
+    def test_overlong_output_is_a_host_io_failure(self):
+        """Windows 上超长路径抛的是 `ValueError`，不该漏成 traceback。
+
+        `os.stat` 在 Windows 对约 40000 字符的路径报 `ValueError: path too long`；
+        `Path.is_dir()` 只吞 `OSError`，异常会直达顶层（审查 P2）。
+        """
+        from unittest import mock
+
+        case = BATCH / "overlong"
+        case.mkdir(parents=True)
+        (case / "entry.pxl").write_text(MINI_DOCUMENT, encoding="utf-8")
+        output = str(case / ("a" * 300 + ".png"))
+        real_stat = os.stat
+
+        def too_long(path, *arguments, **keywords):
+            if str(path).endswith("a" * 300 + ".png"):
+                raise ValueError("stat: path too long for Windows")
+            return real_stat(path, *arguments, **keywords)
+
+        stream = io.StringIO()
+        with mock.patch.object(os, "stat", too_long):
+            with redirect_stderr(stream):
+                code = cli_module.main(["-o", output, str(case / "entry.pxl")])
+        err = stream.getvalue()
+        self.assertEqual(4, code, err)
+        self.assertEqual(1, len(err.splitlines()), "必须恰好一行: %r" % err)
+        self.assertNotIn("Traceback", err)
+
+    def test_empty_output_is_a_usage_error(self):
+        """`-o ""` 曾被 `Path("")` 当成当前目录，然后整批失败 exit 1。"""
+        code = cli_module.main(["-o", "", str(self.entry)])
+        self.assertEqual(2, code, "空输出路径属于用法错")
+
+    def test_root_path_with_parent_segments_is_still_a_directory(self):
+        """`dir/..` 是普通父目录引用，不是链接：判据不能只看词法路径。"""
+        inner = BATCH / "case" / "inner"
+        inner.mkdir()
+        code = cli_module.main([str(inner / "..")])
+        self.assertEqual(0, code, "dir/.. 是普通目录，必须照常编译")
+        self.assertTrue((self.entry.parent / "entry.png").is_file(), "应产出 PNG")
+
+    def test_link_like_directory_root_is_refused(self):
+        """输入**根**本身是链接目录时也要挡。
+
+        递归里的剪枝只看子项：根是 junction 时整棵树都会走到链接目标上，"目录模式处理
+        哪些文件"取决于本机链接（2026-11-20 审查 P2）。
+
+        目标目录里放一个**能独立编译**的入口（`MINI_DOCUMENT`，无素材），否则"没产出
+        z.png"也可能只是素材缺失导致的编译失败，这条用例就会因为错误的原因变绿
+        （CodeRabbit 复审）。
+        """
+        outside = BATCH / "outside"
+        outside.mkdir()
+        (outside / "z.pxl").write_text(MINI_DOCUMENT, encoding="utf-8")
+        if not make_junction(BATCH / "rootlink", outside):
+            self.skipTest("本机无法创建 junction/目录符号链接")
+        stream, err = io.StringIO(), io.StringIO()
+        with redirect_stderr(err):
+            code = cli_module.main([str(BATCH / "rootlink")])
+        self.assertNotEqual(0, code, "链接目录根必须被拒绝")
+        self.assertFalse((outside / "z.png").exists(), "不得编译链接目标下的 .pxl")
+        self.assertIn("输入目录是符号链接/junction", err.getvalue(),
+                      "必须是「拒绝遍历链接」，不能是编译失败: %r" % err.getvalue())
+
+    def test_batch_does_not_follow_a_junction(self):
+        """junction 在 Windows 上不算 islink，`os.walk(followlinks=False)` 照样走进去。
+
+        走进去就会把**给定目录之外**的 .pxl 也编译出 PNG（写回树外），而且"哪些文件被
+        导出"取决于这台机器上谁建过链接。
+        """
+        outside = BATCH / "outside"
+        outside.mkdir()
+        shutil.copy(str(self.entry), str(outside / "z.pxl"))
+        if not make_junction(BATCH / "case" / "link", outside):
+            self.skipTest("本机无法创建 junction/目录符号链接")
+        code = cli_module.main([str(BATCH / "case")])
+        self.assertEqual(0, code)
+        self.assertTrue((self.entry.parent / "entry.png").is_file())
+        self.assertFalse((outside / "z.png").exists(), "不得编译给定目录之外的 .pxl")
 
 
 if __name__ == "__main__":

@@ -524,8 +524,12 @@ class Session(object):
         return entry + rest
 
 
-def compile_target(entry, resolver, bindings=None):
-    """编译一个 target。entry 是逻辑路径;bindings 是 name -> JSON 值/字符串。"""
+def _load_graph(entry, resolver, bindings=None):
+    """相位 A:规范化入口逻辑路径并解析依赖图。不判预算,**一个像素都不写**。
+
+    单独一层是为了让"只解析、不渲染"成为可复用的入口(`dependency_manifest`):批量
+    入口要在任何写入之前收齐全批的依赖清单,而它拿不到、也不需要位图。
+    """
     if not isinstance(entry, str) or not entry:
         raise PxlError("PXL008", "入口逻辑路径为空", ["<入口>"])
     try:
@@ -533,8 +537,50 @@ def compile_target(entry, resolver, bindings=None):
     except PxlError as failure:
         raise PxlError(failure.code, failure.message, [entry])
     session = Session(resolver)
-    # 相位 A:只解析与记账,一个像素都不写。
     node = session.load_graph(entry_path, True, bindings or {})
+    return session, node, entry_path
+
+
+def dependency_manifest(entry, resolver, bindings=None):
+    """只跑相位 A,返回依赖清单:``Compiled.dependencies`` 的同一份东西(§9.4)。
+
+    批量入口需要它做**跨入口**的输出冲突检查:某个入口的输出可能落在**另一个**入口
+    读过的素材上,而依赖清单只有解析完才知道。这里不判预算、不光栅化、不产 PNG,
+    所以一次预扫不需要同时保留多份位图。
+    """
+    session, _node, entry_path = _load_graph(entry, resolver, bindings)
+    return session.manifest(entry_path)
+
+
+def best_effort_manifest(entry, resolver, bindings=None):
+    """返回 ``(manifest, failure)``:解析失败时仍然给出**已经读到**的依赖。
+
+    为什么失败也要给清单:批量入口拿这份清单做"输出会不会覆盖素材"的判据。一个入口
+    读了 `sprite.png` 之后才因为缺别的依赖而失败,那份 `sprite.png` 仍然是**被读过、
+    不能被覆盖**的文件。丢掉它,同批另一个入口的输出就会把素材改掉,而命令只是失败退出
+    (审查 P1)。``failure`` 为 None 表示相位 A 成功。
+    """
+    session = Session(resolver)
+    try:
+        entry_path = logicalpath.normalize(entry) if isinstance(entry, str) and entry else None
+    except PxlError as failure:
+        return [], PxlError(failure.code, failure.message, [entry])
+    if entry_path is None:
+        return [], PxlError("PXL008", "入口逻辑路径为空", ["<入口>"])
+    failure = None
+    try:
+        session.load_graph(entry_path, True, bindings or {})
+    except PxlError as caught:
+        failure = caught
+    # 解析失败时 Session 里留下的是"读到哪算哪"的记账;manifest() 只遍历 self.files,
+    # 因此对部分图同样成立(入口没读到时返回空清单)。
+    return session.manifest(entry_path), failure
+
+
+def compile_target(entry, resolver, bindings=None):
+    """编译一个 target。entry 是逻辑路径;bindings 是 name -> JSON 值/字符串。"""
+    # 相位 A:只解析与记账,一个像素都不写。
+    session, node, entry_path = _load_graph(entry, resolver, bindings)
     # 相位 B:R4。依赖图已经固定,此刻"依赖缺失"该报的早就报了(§11.2 的 R2 先于 R4)。
     session.check_budgets()
     # 相位 C:预算通过,才允许写像素。
@@ -557,12 +603,15 @@ def conflicting_source(candidate, asset_root, dependencies):
         return None
     try:
         target = Path(candidate).resolve()
-    except (OSError, RuntimeError):
+    except (OSError, RuntimeError, ValueError):
+        # ValueError = 宿主不接受这个路径（Windows 的 NUL、超长路径等）：不是"不冲突"，
+        # 而是"这条路径根本用不了"。返回 None 让写入阶段把它报成受控的 I/O 失败，
+        # 而不是在这里抛 traceback（审查 P2）。
         return None
     for item in dependencies:
         try:
             source = (Path(asset_root) / item.logical_path).resolve()
-        except (OSError, RuntimeError):
+        except (OSError, RuntimeError, ValueError):
             continue
         if target == source:
             return item.logical_path

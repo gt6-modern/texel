@@ -412,6 +412,19 @@ public final class UnitTestMain {
             }
         });
 
+        run("png.encoder-rejects-out-of-range-size", new Runnable() {
+            public void run() {
+                // 编码器写出的 PNG 必须是它自己 reader 能读的：零边、单边超 65536、
+                // 面积超 2^22 都要在写字节前拒绝（审查 #9/#10）。
+                expectEncoderRejects(0, 0, "零尺寸");
+                expectEncoderRejects(65537, 1, "单边超 65536");
+                expectEncoderRejects(2049, 2049, "面积超 2^22");
+                // 边界本身合法：2048 × 2048 恰好等于 2^22。
+                byte[] limit = PngEncoder.encode(2048, 2048, new byte[2048 * 2048 * 4]);
+                Assert.equal(2048, PngDecoder.decode(limit).width, "2^22 面积仍可编码");
+            }
+        });
+
         run("png.decoder-rejects-overflowing-size", new Runnable() {
             public void run() {
                 // width = 0x40000000 时 `width * 4` 用 int 算回绕成 0，于是"精确解压长度"
@@ -627,6 +640,16 @@ public final class UnitTestMain {
         try {
             PngDecoder.decode(png);
             Assert.fail(what + "：应拒绝");
+        } catch (IllegalArgumentException expected) {
+            // 预期
+        }
+    }
+
+    /** 编码器对越界尺寸必须在写字节前拒绝，而不是产出自己读不了的 PNG。 */
+    private static void expectEncoderRejects(int width, int height, String what) {
+        try {
+            PngEncoder.encode(width, height, new byte[4 * width * height]);
+            Assert.fail(what + "：编码器应拒绝");
         } catch (IllegalArgumentException expected) {
             // 预期
         }

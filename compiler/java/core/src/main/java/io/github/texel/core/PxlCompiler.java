@@ -53,6 +53,64 @@ public final class PxlCompiler {
     }
 
     /**
+     * 相位 A：只解析与记账，**一个像素都不写**，返回依赖清单（§9.4）。
+     *
+     * <p>批量入口要在任何写入之前判断"某个输出会不会覆盖**另一个**入口读过的文件"，
+     * 而依赖清单只有解析完才知道。走完整的 {@link #compile} 会把位图也留在内存里，
+     * 一次预扫就要同时持有 N 份位图；这里只跑相位 A，位图一份都不留。
+     *
+     * <p><b>失败时也要把"已经读到"的清单交给调用方</b>（{@code partial}）：一个入口读了
+     * {@code sprite.png} 之后才因为缺别的依赖而失败，那份 png 仍然是"被读过、不能被覆盖"
+     * 的文件。丢掉它，同批另一个入口的输出就会把素材改掉，而命令只是失败退出。
+     *
+     * @param entryLogicalPath 入口逻辑路径
+     * @param resolver         素材解析器
+     * @param bindings         入口参数绑定
+     * @param partial          非 null 时（成功或失败都）填入本次读到的依赖
+     * @return 依赖清单；解析失败时抛出异常（但 {@code partial} 已被填好）
+     */
+
+    public static List<Dependency> dependencies(String entryLogicalPath, AssetResolver resolver,
+            Map<String, String> bindings, List<Dependency> partial) throws PxlFormatException {
+        if (entryLogicalPath == null || resolver == null) {
+            throw new NullPointerException("entryLogicalPath/resolver");
+        }
+        Session session = new Session(resolver);
+        try {
+            session.loadGraph(entryLogicalPath, true,
+                    bindings == null ? java.util.Collections.<String, String>emptyMap() : bindings);
+        } catch (PxlFormatException failure) {
+            collectPartial(session, partial);
+            throw failure;
+        } catch (RuntimeException failure) {
+            collectPartial(session, partial);
+            throw failure;
+        }
+        List<Dependency> manifest = session.manifest();
+        if (partial != null) {
+            partial.addAll(manifest);
+        }
+        return manifest;
+    }
+    /**
+     * 失败时尽力交回"已经读到"的清单。
+     *
+     * <p>{@code manifest()} 要求入口行已经记账；入口本身就是失败原因时（例如超过 64 MiB，
+     * {@code PXL002} 在 {@code recordFile} 之前抛出）它自己还会抛
+     * {@code IllegalStateException}，那会把**原始的** PXL 错误盖成 CLI001（审查 P2）。
+     * 所以这里吞掉清单侧的失败：没有部分清单可以接受，丢掉原始诊断不行。
+     */
+    private static void collectPartial(Session session, List<Dependency> partial) {
+        if (partial == null) {
+            return;
+        }
+        try {
+            partial.addAll(session.manifest());
+        } catch (RuntimeException ignored) {
+            // 入口行没记上：没有部分清单可用。原始异常由调用方继续抛出。
+        }
+    }
+    /**
      * 编译一个入口。
      *
      * @param entryLogicalPath 入口的逻辑路径（已由调用方规范化；见 {@link LogicalPath}）

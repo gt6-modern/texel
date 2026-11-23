@@ -24,13 +24,16 @@ class PublicReleaseTest(unittest.TestCase):
         self.assertFalse((ROOT / "spec" / "PXL-v1.md").exists())
 
     def test_release_metadata_is_consistent(self):
+        # 期望值一律从 `VERSION` 推导:写死版本号会让"按手册升版"变成"再改一处测试"
+        # (审查 #23)。逐面同步的强制检查在 `tools/check_release_metadata.py`。
+        version = (ROOT / "VERSION").read_text(encoding="ascii").strip()
         importer = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
         compiler = (ROOT / "compiler" / "python" / "pyproject.toml").read_text(encoding="utf-8")
-        self.assertRegex(importer, r'(?m)^version = "0\.1\.0"$')
-        self.assertRegex(compiler, r'(?m)^version = "0\.1\.0"$')
+        self.assertRegex(importer, r'(?m)^version = "' + re.escape(version) + r'"$')
+        self.assertRegex(compiler, r'(?m)^version = "' + re.escape(version) + r'"$')
         fixture = json.loads((ROOT / "spec" / "conformance" / "capabilities" /
                               "pxl-v1.json").read_text(encoding="utf-8"))
-        self.assertEqual("0.1.0", fixture["compiler_version"])
+        self.assertEqual(version, fixture["compiler_version"])
         self.assertEqual("pxl-v1", fixture["conformance_profile"])
         self.assertEqual([1], fixture["language_versions"])
         self.assertEqual(set(["1"]), set(fixture["error_code_ranges"]))

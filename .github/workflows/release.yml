@@ -96,6 +96,16 @@ jobs:
       - name: Hash all final assets including the SBOM
         working-directory: dist/release
         run: sha256sum * > SHA256SUMS
+      # 资产集是发布契约的一部分:少一件就发布一个缺文件的版本，而这一步之后全是**不可逆**
+      # 的动作(证明、上传、建 Release 页)。所以在这里用同一份判据守一遍，而不是只信构建
+      # 脚本"应该都产出了"(审查 #19)。tools/release_state.py 在真正动 Release 之前还会
+      # 用同一套规则再验一次。
+      - name: Verify the release asset set
+        env:
+          # 版本号经 env 传入，不在 run: 里做模板展开：zizmor 对 `${{ }}` 直接拼进
+          # shell 一律报 template-injection（版本取自仓库内的 VERSION，但没必要保留这个面）。
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+        run: python tools/check_release_assets.py dist/release --version "$RELEASE_VERSION"
       # 供应链证明只在公开仓库可用：私有仓库 + 组织免费计划会被 GitHub 直接拒绝
       # （Release run #4 实测："Feature not available for the gt6-modern organization"）。
       # 它不该挡住构建与发布，所以按仓库可见性跳过；公开后自动恢复。
@@ -140,14 +150,24 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi-importer
     permissions:
+      contents: read      # job 级 permissions 会覆盖顶层声明：不给的话私有仓库里 checkout 起不来
       id-token: write
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: python-distributions-importer
           path: dist/python
       # 发布必须可重跑：同一个版本重复上传 PyPI 会被拒（"File already exists"），
       # 那样重跑就永远绿不了。先问 PyPI 的 JSON API（公开、不需要凭据），已发布就跳过。
+      #
+      # 判据全在 tools/release_probes.py 里：**只有 404 算"没发布"**，TLS/DNS/403/429/5xx
+      # 一律让 job 红（`curl -fsS` 会把它们全塞进 else，于是基础设施故障被当成"版本不存在"，
+      # 发布流程接着做不可幂等的上传 —— 审查 #21）；而 200 也必须核对 wheel 与 sdist 都在，
+      # 半发布同样让 job 红（审查 #20）。
       - name: Skip when this version is already on PyPI
         id: published
         env:
@@ -157,13 +177,8 @@ jobs:
           wheel=$(ls dist/python/*.whl | head -1)
           test -n "$wheel"
           version=$(basename "$wheel" | sed -E 's/^[^-]+-([^-]+)-.*$/\1/')
-          if curl -fsS "https://pypi.org/pypi/$PROJECT/$version/json" >/dev/null 2>&1; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "$PROJECT $version 已在 PyPI 上，跳过上传"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "PyPI 上还没有 $PROJECT $version，继续上传"
-          fi
+          python tools/release_probes.py pypi --project "$PROJECT" --version "$version" \
+            >> "$GITHUB_OUTPUT"
       - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         if: steps.published.outputs.skip != 'true'
         with:
@@ -176,12 +191,19 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi-compiler
     permissions:
+      contents: read      # job 级 permissions 会覆盖顶层声明：不给的话私有仓库里 checkout 起不来
       id-token: write
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: python-distributions-compiler
           path: dist/python
+      # 与 importer 同一个判据（tools/release_probes.py）：只有 404 算未发布，
+      # 200 还要 wheel+sdist 齐全（审查 #20 / #21）。
       - name: Skip when this version is already on PyPI
         id: published
         env:
@@ -191,13 +213,8 @@ jobs:
           wheel=$(ls dist/python/*.whl | head -1)
           test -n "$wheel"
           version=$(basename "$wheel" | sed -E 's/^[^-]+-([^-]+)-.*$/\1/')
-          if curl -fsS "https://pypi.org/pypi/$PROJECT/$version/json" >/dev/null 2>&1; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "$PROJECT $version 已在 PyPI 上，跳过上传"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "PyPI 上还没有 $PROJECT $version，继续上传"
-          fi
+          python tools/release_probes.py pypi --project "$PROJECT" --version "$version" \
+            >> "$GITHUB_OUTPUT"
       - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         if: steps.published.outputs.skip != 'true'
         with:
@@ -213,28 +230,56 @@ jobs:
     runs-on: ubuntu-latest
     environment: maven-central
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: central-bundle
           path: dist
+      # 上一次运行（同一 run 的重跑）留下的部署 id：有就接着用，绝不重复上传同一版本。
+      - name: Recover an in-flight deployment from this run
+        id: recovered
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: central-deployment
+          path: central-deployment
       - name: Skip when this version is already on Central
         id: released
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
         shell: bash
         run: |
-          # 发布必须可重跑：同一个版本已经进了 Central 之后再传一次会被拒（"already exists"），
-          # 那样重跑就永远绿不了。这里先问 repo1（公开、不需要凭据），已存在就跳过上传。
+          # 整个"还要不要上传"的判断都在 `central-recover` 里（一段可测的代码，不是
+          # shell 分支）：上传接口 201 只代表"接受了 bundle"，之后还要 PENDING →
+          # VALIDATING → PUBLISHING 才到 PUBLISHED，也可能 FAILED，所以判据必须按**状态**
+          # 走，而不是"文件看不见就再传一遍"（审查 P1）：
+          #
+          # 1. 有保存的 deployment id → 问状态：已发布 → 跳过；进行中 → 等它 PUBLISHED；
+          #    明确 FAILED → 允许重新上传。
+          # 2. 没 id（Portal 已接受但 artifact 没落盘，或全新一次运行）→ 按固定名字
+          #    `texel-<tag>` 查 Portal：有 PUBLISHED → 跳过；恰好一个进行中 → 等它；
+          #    多个进行中或状态无法识别 → 关闭失败；只剩 FAILED 或没有 → 允许重新上传。
+          # 3. 最后查 repo1：两个模块各 8 个文件（POM / 主 JAR / sources / Javadoc 及各自
+          #    的 .asc 签名，共 16 个），并给刚上传的部署 5 分钟可见性时间。
           bundle=$(find dist -name '*-central.zip' -print -quit)
           test -n "$bundle"
           version=$(basename "$bundle" | sed -e 's/^texel-//' -e 's/-central\.zip$//')
-          probe="https://repo1.maven.org/maven2/io/github/gt6-modern/texel-core/$version/texel-core-$version.pom"
-          if curl -fsS --head "$probe" >/dev/null 2>&1; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "io.github.gt6-modern:texel-core:$version 已在 Central 上，跳过上传"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-            echo "Central 上还没有 $version，继续上传"
+          id=""
+          if [ "${{ steps.recovered.outcome }}" = "success" ] \
+             && [ -f central-deployment/deployment-id.txt ]; then
+            id=$(tr -d '[:space:]' < central-deployment/deployment-id.txt)
           fi
+          python tools/release_probes.py central-recover \
+            --name "texel-${GITHUB_REF_NAME}" \
+            --version "$version" \
+            --deployment-id "$id" \
+            --wait-visible 300 --interval 20 >> "$GITHUB_OUTPUT"
       - name: Upload Central Portal bundle
+        id: upload
         if: steps.released.outputs.skip != 'true'
         env:
           CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
@@ -243,9 +288,40 @@ jobs:
         run: |
           bundle=$(find dist -name '*-central.zip' -print -quit)
           test -n "$bundle"
-          curl --fail-with-body --user "$CENTRAL_USERNAME:$CENTRAL_PASSWORD" \
-            --form bundle="@$bundle" \
-            "https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC&name=texel-${GITHUB_REF_NAME}"
+          # 上传与状态查询都在 tools/release_probes.py 里完成：Portal 要的是
+          # `Authorization: Bearer <base64(user:token)>`（`curl --user` 发的是 Basic，
+          # 状态轮询会被 401）；凭据只待在请求头里，stdout 只有 deployment id，
+          # 不会把 base64 凭据写进构建日志（GitHub 的掩码盖不住它）。
+          id=$(python tools/release_probes.py central-upload \
+                 --bundle "$bundle" --name "texel-${GITHUB_REF_NAME}")
+          test -n "$id"
+          # deployment id 必须留住：否则重跑只能靠 repo1 可见性猜。
+          echo "$id" > deployment-id.txt
+          test -n "$id"
+          echo "Central 接受了 bundle，部署 id = $id"
+          echo "deployment_id=$id" >> "$GITHUB_OUTPUT"
+      - name: Keep the deployment id for a rerun
+        if: always() && steps.upload.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: central-deployment
+          path: deployment-id.txt
+          if-no-files-found: error
+          # upload-artifact@v4 的 overwrite 默认 false：同一 run 里 FAILED 后重传会产生
+          # 第二个 id，不覆盖就会让这一步失败、后续 wait 不执行、旧 id 永远指向坏部署，
+          # 下一次重跑又再传一遍（审查 P1）。
+          overwrite: true
+      - name: Wait until the deployment is PUBLISHED
+        if: steps.released.outputs.skip != 'true'
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+          DEPLOYMENT_ID: ${{ steps.upload.outputs.deployment_id }}
+        shell: bash
+        run: |
+          # 上传成功 ≠ 发布成功：只有 PUBLISHED 才是"已到 Maven Central"。FAILED 或超时
+          # 都会让这个 job 红，从而挡住依赖它的 github-release（审查 P1）。
+          python tools/release_probes.py central-wait --deployment-id "$DEPLOYMENT_ID" --timeout 1800
 
   github-release:
     # 真正的发布只发生在 tag 上：tag 推送，或手动触发且 dry_run == false（且当前 ref 是 tag）。

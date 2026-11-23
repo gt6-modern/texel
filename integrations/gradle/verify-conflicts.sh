@@ -41,6 +41,11 @@ echo "== E) 产物写入失败后不得留下临时文件 =="
 # 用**只读目录**制造确定的写入失败：不依赖名字长度、NAME_MAX 或 seq 是否存在
 # （此前三次尝试都栽在这些环境依赖上）。root 下 chmod 不生效时显式 SKIP，不假装通过。
 # 输出指向一个**已存在的目录**：move 必然失败（root 也挡不住），与权限/名字长度都无关。
+#
+# 2026-11-21 起这条路径的错误码变了：`compile` 把 PNG 与 `--deps` 清单当一组事务发布，
+# 于是"目标已存在但不是普通文件"在**任何写入之前**就被判成用法错误（`CLI004` +
+# 退出码 2），不再走到 rename 失败（`CLI003` + 4）。本条的意图是"受控失败且不留临时
+# 文件"，所以两种受控诊断都接受；**成功**才算失败（目录永远不该被就地覆盖）。
 LOCKED=build/locked
 rm -rf "$LOCKED"; mkdir -p "$LOCKED"; : > "$LOCKED/keep"   # 非空目录：move 无法覆盖它
 out=$(java -cp "$CP_DIR" io.github.texel.cli.Main compile entry.pxl \
@@ -48,13 +53,13 @@ out=$(java -cp "$CP_DIR" io.github.texel.cli.Main compile entry.pxl \
 RC=$?
 echo "$out" | head -1
 if [ "$RC" -eq 0 ]; then
-    echo "E SKIP: 本环境没有权限限制（很可能是 root），本条不适用"
+    echo "E FAIL: 输出指向一个已存在的目录竟然成功"; fail=1
 else
     # want() 定义在脚本后面，E 段在它之前执行，这里直接用 grep。
-    if echo "$out" | grep -q "I/O 失败"; then
-        echo "E OK: 确实走到了写入失败那一格"
+    if echo "$out" | grep -qE "CLI004.*目录|I/O 失败"; then
+        echo "E OK: 受控拒绝（输出是目录 / 写入失败），退出码 $RC"
     else
-        echo "E FAIL: 没有出现预期的写入失败"; fail=1
+        echo "E FAIL: 失败但不是受控诊断"; fail=1
     fi
     if [ "$(ls -1a build | grep -c "texel-compiler.*tmp")" -ne 0 ]; then
         echo "E FAIL: 失败后留下临时文件"; fail=1

@@ -5,6 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = ROOT / "spec/conformance/capabilities/pxl-v1.json"
+VERSION = ROOT / "VERSION"
 ALLOWED_KEYS = set([
     "capabilities_version", "compiler_id", "compiler_version",
     "conformance_profile", "language_versions", "error_code_ranges",
@@ -25,7 +26,10 @@ class CapabilitiesSchemaTest(unittest.TestCase):
     def test_exact_current_profile(self):
         self.assertEqual(ALLOWED_KEYS, set(self.data))
         self.assertEqual(1, self.data["capabilities_version"])
-        self.assertEqual("0.1.0", self.data["compiler_version"])
+        # 期望值从 `VERSION` 推导,而不是写死 "0.1.0":写死的版本号是第九个"升版时要记得改"
+        # 的地方,漏了就会让按手册升版的人在这里撞红(审查 #23)。
+        self.assertEqual(VERSION.read_text(encoding="ascii").strip(),
+                         self.data["compiler_version"])
         self.assertEqual("pxl-v1", self.data["conformance_profile"])
         self.assertEqual([1], self.data["language_versions"])
         self.assertEqual({"1": {"min": "PXL001", "max": "PXL012"}},

@@ -1,10 +1,66 @@
 import copy
 import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
-from tools.check_release_assets import AssetVerificationError, verify_assets, local_assets
+from tools.check_release_assets import (AssetVerificationError, local_assets,
+                                        require_release_set, required_assets,
+                                        verify_assets)
+
+VERSION = '0.2.0'
+
+#: 发布契约承诺的九个资产名，**独立于被测的 `required_assets`** 写死一份：
+#: 否则 `required_assets` 自己漏掉一件时，夹具、逐项删除用例和期望值会一起缩水，
+#: 门禁照样全绿（CodeRabbit 复审）。
+CONTRACT = (
+    'SHA256SUMS',
+    'texel-0.2.0-central.zip',
+    'texel-0.2.0.spdx.json',
+    'texel-cli-0.2.0.tar.gz',
+    'texel-compiler-0.2.0.zip',
+    'texel_compiler-0.2.0-py3-none-any.whl',
+    'texel_compiler-0.2.0.tar.gz',
+    'texel_importer-0.2.0-py3-none-any.whl',
+    'texel_importer-0.2.0.tar.gz',
+)
+
+
+def write_release_set(root, version=VERSION):
+    """Write the complete asset set `docs/releasing.md` promises.
+
+    每一件都写成可区分的内容：验证器只看集合、大小与摘要，不需要真是压缩包。
+    """
+    for name in required_assets(version):
+        if name == 'SHA256SUMS':
+            continue
+        if name.endswith('.spdx.json'):
+            (root / name).write_text(json.dumps({
+                'spdxVersion': 'SPDX-2.3',
+                'name': 'texel-' + version,
+                'packages': [{'name': 'texel', 'SPDXID': 'SPDXRef-Package-texel'}],
+            }), encoding='utf-8')
+        else:
+            (root / name).write_bytes((name + '\n').encode('ascii') * 3)
+    rewrite_sums(root)
+
+
+def rewrite_sums(root, include=None):
+    names = sorted(path.name for path in root.iterdir()
+                   if path.is_file() and path.name != 'SHA256SUMS')
+    lines = []
+    for name in names:
+        if include is not None and name not in include:
+            continue
+        lines.append(hashlib.sha256((root / name).read_bytes()).hexdigest() + '  ' + name)
+    (root / 'SHA256SUMS').write_text('\n'.join(lines) + '\n', encoding='ascii')
+
+
+def remote_metadata(root):
+    return [dict(name=p.name, size=p.stat().st_size,
+                 digest='sha256:' + hashlib.sha256(p.read_bytes()).hexdigest(),
+                 state='uploaded') for p in sorted(root.iterdir())]
 
 
 class ReleaseAssetTest(unittest.TestCase):
@@ -62,6 +118,113 @@ class ReleaseAssetTest(unittest.TestCase):
         (self.root / 'SHA256SUMS').unlink()
         with self.assertRaises(AssetVerificationError):
             local_assets(self.root)
+
+
+#: 合成目录按本仓库惯例建在 `tests/_tmp/` 下：本机沙箱里 `tempfile` 造出来的目录
+#: 既写不进也删不掉（`tests/test_python_compiler.py` 的 workspace() 有同样的注记）。
+WORK = Path(__file__).resolve().parent / '_tmp' / 'release-assets'
+
+
+class ReleaseContractTest(unittest.TestCase):
+    """`require_release_set`：发布契约的固定资产集(审查 #19)。
+
+    宽松的 upload-set 检查仍然必要(命名安全、清单覆盖、摘要相符)，但它把"任意两个文件"
+    也当成合法输入：一份 `payload.bin` + 覆盖它的 `SHA256SUMS` 就能通过，然后就可能成为
+    一个已发布的版本。这里把"完整集合"写成判据。
+    """
+
+    def setUp(self):
+        import shutil
+        self.root = WORK / self._testMethodName.replace('test_', '')
+        shutil.rmtree(str(self.root), ignore_errors=True)
+        self.root.mkdir(parents=True)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(str(self.root), ignore_errors=True)
+
+    def assert_rejected(self, fragment):
+        with self.assertRaises(AssetVerificationError) as caught:
+            require_release_set(self.root, VERSION)
+        self.assertIn(fragment, str(caught.exception))
+
+    def test_complete_set_passes(self):
+        write_release_set(self.root)
+        assets = require_release_set(self.root, VERSION)
+        self.assertEqual(sorted(CONTRACT), sorted(assets),
+                         "契约清单必须逐字匹配（不从 required_assets 取期望值）")
+
+    def test_required_assets_matches_the_contract(self):
+        self.assertEqual(sorted(CONTRACT), sorted(required_assets(VERSION)),
+                         "固定资产集本身少一件也要红")
+
+    def test_payload_only_directory_is_rejected(self):
+        # The issue's reproduction: a stray payload.bin with a covering manifest.
+        payload = b'release payload\n'
+        (self.root / 'payload.bin').write_bytes(payload)
+        (self.root / 'SHA256SUMS').write_text(
+            hashlib.sha256(payload).hexdigest() + '  payload.bin\n', encoding='ascii')
+        self.assert_rejected('missing')
+
+    def test_every_required_asset_is_required(self):
+        for name in required_assets(VERSION):
+            if name == 'SHA256SUMS':
+                continue
+            with self.subTest(missing=name):
+                self.setUp()
+                write_release_set(self.root)
+                (self.root / name).unlink()
+                rewrite_sums(self.root)
+                self.assert_rejected(name)
+
+    def test_unexpected_file_is_rejected(self):
+        write_release_set(self.root)
+        (self.root / 'stray.txt').write_bytes(b'x')
+        rewrite_sums(self.root)
+        self.assert_rejected('unexpected')
+
+    def test_sbom_must_parse_and_list_packages(self):
+        write_release_set(self.root)
+        sbom = self.root / ('texel-' + VERSION + '.spdx.json')
+        for text, fragment in ((b'not json\n', 'parseable'),
+                               (json.dumps({'spdxVersion': 'SPDX-2.3', 'packages': []}), 'packages'),
+                               (json.dumps({'packages': [{'name': 'x'}]}), 'spdxVersion')):
+            with self.subTest(fragment=fragment):
+                sbom.write_bytes(text if isinstance(text, bytes) else text.encode('utf-8'))
+                rewrite_sums(self.root)
+                self.assert_rejected(fragment)
+
+    def test_manifest_must_still_cover_the_set(self):
+        write_release_set(self.root)
+        victim = required_assets(VERSION)[0]
+        rewrite_sums(self.root, include=[name for name in required_assets(VERSION)
+                                         if name != victim])
+        self.assert_rejected('SHA256SUMS')
+
+    def test_tampered_asset_is_rejected(self):
+        write_release_set(self.root)
+        (self.root / required_assets(VERSION)[0]).write_bytes(b'tampered\n')
+        self.assert_rejected('checksum')
+
+    def test_remote_verification_also_needs_the_full_set(self):
+        write_release_set(self.root)
+        verify_assets(self.root, remote_metadata(self.root))
+        truncated = [asset for asset in remote_metadata(self.root)
+                     if asset['name'] != required_assets(VERSION)[0]]
+        with self.assertRaises(AssetVerificationError):
+            verify_assets(self.root, truncated)
+
+    def test_version_must_be_a_release_version(self):
+        write_release_set(self.root)
+        for version in ('', 'v0.2.0', '0.2', 'latest'):
+            with self.subTest(version=version):
+                with self.assertRaises(AssetVerificationError):
+                    require_release_set(self.root, version)
+
+    def test_other_versions_are_a_different_set(self):
+        write_release_set(self.root)
+        with self.assertRaises(AssetVerificationError):
+            require_release_set(self.root, '0.2.1')
 
 
 if __name__ == '__main__':
