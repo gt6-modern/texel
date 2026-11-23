@@ -54,6 +54,11 @@ CENTRAL_STATUS = "https://central.sonatype.com/api/v1/publisher/status?id={deplo
 #: 上传 bundle。响应体就是 deployment id。
 CENTRAL_UPLOAD = ("https://central.sonatype.com/api/v1/publisher/upload"
                   "?publishingType=AUTOMATIC&name={name}")
+#: 列出某个 namespace 下的部署(带分页)。用在"没有保存的 id"时按 deploymentsName 找回。
+CENTRAL_DEPLOYMENTS = ("https://central.sonatype.com/api/v1/publisher/deployments"
+                       "?namespace={namespace}&page={page}&size={size}")
+#: 本仓库在 Central 上的 namespace。
+CENTRAL_NAMESPACE = "io.github.gt6-modern"
 
 #: 视为"版本尚未发布"的唯一 HTTP 状态。
 NOT_FOUND = 404
@@ -86,18 +91,29 @@ def central_auth(environ=None):
     return (user, password)
 
 
-def authorization_header(auth=None):
-    """Central Portal 的 ``Authorization`` 头。
+def authorization_header(auth):
+    """Central Portal 的 ``Authorization`` 头(**只**给 Portal 用)。
 
     官方契约是 **`Bearer <base64(username:portal-token)>`**(另有一个非标准的
-    `UserToken` 兼容写法),**不是** HTTP Basic。上传与状态查询必须用同一个构造,
-    否则状态轮询会被 401 拒绝、每次 Central 发布都卡在等待阶段(审查 P1)。
+    `UserToken` 兼容写法),**不是** HTTP Basic。
+
+    ``auth is None`` 表示**不认证**——这是刻意的:公开端点(repo1 / PyPI)的探测走同一个
+    ``fetch``,如果这里从环境变量兜底,Portal token 就会被发给 repo1.maven.org
+    (审查 P1)。需要认证的调用方必须显式传凭据(见 ``_portal_auth``)。
     """
-    credentials = central_auth() if auth is None else auth
-    if credentials is None:
+    if auth is None:
         return None
-    token = base64.b64encode(("%s:%s" % credentials).encode("utf-8")).decode("ascii")
+    token = base64.b64encode(("%s:%s" % auth).encode("utf-8")).decode("ascii")
     return "Bearer " + token
+
+
+def _portal_auth(auth=None):
+    """Portal API 的凭据:显式传入优先,否则读环境。
+
+    **只有** ``central_upload`` / ``central_deployment_state`` / ``central_deployments``
+    这些 Portal 调用可以走这条兜底;``fetch`` 本身永远是"没传就不认证"。
+    """
+    return auth if auth is not None else central_auth()
 
 
 def fetch(url, timeout=30, method="GET", auth=None, body=None, headers=None):
@@ -235,7 +251,7 @@ def central_upload(bundle_path, name, fetch=None, auth=None):
     ])
     url = CENTRAL_UPLOAD.format(name=urllib.parse.quote(name))
     status, response = fetch(
-        url, method="POST", auth=auth, body=body,
+        url, method="POST", auth=_portal_auth(auth), body=body,
         headers={"Content-Type": "multipart/form-data; boundary=" + CENTRAL_UPLOAD_BOUNDARY})
     if status not in (200, 201):
         raise ProbeError("Central 上传返回 HTTP %d" % status)
@@ -243,6 +259,45 @@ def central_upload(bundle_path, name, fetch=None, auth=None):
     if not deployment_id:
         raise ProbeError("Central 接受了 bundle 却没有给出 deployment id")
     return deployment_id
+
+
+def central_deployments(name=None, namespace=CENTRAL_NAMESPACE, fetch=None, auth=None,
+                        page_size=50, max_pages=20):
+    """列出 Portal 上的部署(按 ``name`` 过滤),用来找回"丢了 id"的那一次。
+
+    上传接口一旦返回,部署就已经在 Portal 上存在了;如果 runner 在此之前被取消、artifact
+    没来得及落盘,重跑手里就没有 id。这时按**固定的 deploymentName** 找回它,比盲目重传
+    安全(审查 P1)。
+    """
+    fetch = _resolved(fetch)
+    matches = []
+    for page in range(max_pages):
+        url = CENTRAL_DEPLOYMENTS.format(namespace=urllib.parse.quote(namespace),
+                                         page=page, size=page_size)
+        status, body = fetch(url, auth=_portal_auth(auth))
+        if status != 200:
+            raise ProbeError("Central 部署列表返回 HTTP %d" % status)
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError) as failure:
+            raise ProbeError("Central 部署列表返回的不是 JSON: %s" % failure)
+        entries = payload.get("deployments") if isinstance(payload, dict) else payload
+        if not isinstance(entries, list):
+            raise ProbeError("Central 部署列表响应格式不对")
+        for entry in entries:
+            if not isinstance(entry, dict):
+                raise ProbeError("Central 部署列表里有非对象条目")
+            deployment_id = entry.get("deploymentId")
+            deployment_name = entry.get("deploymentName")
+            if not isinstance(deployment_id, str) or not deployment_id:
+                raise ProbeError("Central 部署列表里有缺少 deploymentId 的条目")
+            if name is None or deployment_name == name:
+                matches.append({"id": deployment_id,
+                                "name": deployment_name,
+                                "state": entry.get("deploymentState")})
+        if len(entries) < page_size:
+            break
+    return matches
 
 
 def central_deployment_state(deployment_id, fetch=None, auth=None):
@@ -256,7 +311,7 @@ def central_deployment_state(deployment_id, fetch=None, auth=None):
         raise ProbeError("缺少 deployment id:无法查询 Central 部署状态")
     fetch = _resolved(fetch)
     url = CENTRAL_STATUS.format(deployment_id=urllib.parse.quote(str(deployment_id).strip()))
-    status, body = fetch(url, method="POST", auth=auth)
+    status, body = fetch(url, method="POST", auth=_portal_auth(auth))
     if status != 200:
         raise ProbeError("Central 部署状态查询返回 HTTP %d(部署 %s)"
                          % (status, deployment_id))
@@ -290,7 +345,7 @@ def central_wait(deployment_id, timeout=900.0, interval=20.0, fetch=None, auth=N
     deadline = clock() + max(0.0, float(timeout))
     last = "尚未查询"
     while True:
-        state, detail = central_deployment_state(deployment_id, fetch=fetch, auth=auth)
+        state, detail = central_deployment_state(deployment_id, fetch=fetch, auth=_portal_auth(auth))
         if state == PUBLISHED:
             return PUBLISHED, detail
         if state == FAILED:
@@ -322,6 +377,9 @@ def main(argv=None):
     upload = subparsers.add_parser("central-upload", help="上传 bundle,只把 deployment id 打到 stdout")
     upload.add_argument("--bundle", required=True)
     upload.add_argument("--name", required=True)
+    find = subparsers.add_parser("central-find", help="按 deploymentName 找回已有部署")
+    find.add_argument("--name", required=True)
+    find.add_argument("--namespace", default=CENTRAL_NAMESPACE)
     arguments = parser.parse_args(argv)
 
     try:
@@ -334,6 +392,23 @@ def main(argv=None):
             deployment_id = central_upload(arguments.bundle, arguments.name, auth=credentials)
             sys.stdout.write(deployment_id + "\n")
             sys.stderr.write("release-probe: Central 接受了 bundle:%s\n" % deployment_id)
+            return 0
+        if arguments.command == "central-find":
+            # 0 = 找到唯一一个(打印 id)/ 3 = 确实没有 / 1 = 有歧义或查不出来(关闭失败)
+            matches = central_deployments(name=arguments.name,
+                                          namespace=arguments.namespace)
+            if not matches:
+                sys.stderr.write("release-probe: Portal 上没有名为 %s 的部署\n"
+                                 % arguments.name)
+                return 3
+            if len(matches) > 1:
+                sys.stderr.write("release-probe: 名为 %s 的部署有 %d 个,无法判断该续哪一个: %r\n"
+                                 % (arguments.name, len(matches),
+                                    [item["id"] for item in matches]))
+                return 1
+            sys.stdout.write(matches[0]["id"] + "\n")
+            sys.stderr.write("release-probe: 找到部署 %s(状态 %s)\n"
+                             % (matches[0]["id"], matches[0]["state"]))
             return 0
         if arguments.command == "central-status":
             # 退出码就是给 shell 用的协议:0 已发布 / 3 进行中 / 4 明确失败 / 1 查不出来。

@@ -11,6 +11,7 @@
 """
 
 import base64
+import contextlib
 import io
 import json
 import os
@@ -304,6 +305,115 @@ class CentralAuthorizationTest(unittest.TestCase):
         self.assertEqual("", out.getvalue())
 
 
+def _quiet(run):
+    """跑一次;探测本身的失败这里不关心(本类只看请求头)。"""
+    with contextlib.suppress(probes.ProbeError):
+        run()
+
+
+class PublicEndpointAuthTest(unittest.TestCase):
+    """公开端点(repo1 / PyPI)的探测**绝不能**带 Portal 凭据。"""
+
+    ENV = {"CENTRAL_USERNAME": "user", "CENTRAL_PASSWORD": "token"}
+
+    def capture(self, run):
+        headers = []
+
+        class Response(object):
+            status = 404
+
+            def read(self):
+                return b""
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        def fake_urlopen(request, timeout=None):
+            headers.append((request.full_url, request.get_header("Authorization")))
+            return Response()
+
+        original = probes.urllib.request.urlopen
+        probes.urllib.request.urlopen = fake_urlopen
+        try:
+            with mock.patch.dict(os.environ, self.ENV, clear=False):
+                run()
+        finally:
+            probes.urllib.request.urlopen = original
+        return headers
+
+    def test_repo1_probe_sends_no_authorization(self):
+        headers = self.capture(lambda: probes.central_state("0.2.0"))
+        self.assertEqual(4, len(headers), "四个文件各探测一次")
+        for url, header in headers:
+            self.assertIn("repo1.maven.org", url)
+            self.assertIsNone(header, "Portal 凭据不得发给 repo1: %s" % url)
+
+    def test_pypi_probe_sends_no_authorization(self):
+        headers = self.capture(lambda: probes.pypi_state("texel-importer", "0.2.0"))
+        self.assertEqual(1, len(headers))
+        self.assertIn("pypi.org", headers[0][0])
+        self.assertIsNone(headers[0][1], "Portal 凭据不得发给 PyPI")
+
+    def test_portal_calls_do_send_the_bearer_token(self):
+        headers = self.capture(
+            lambda: _quiet(lambda: probes.central_deployment_state("abc-123")))
+        self.assertEqual(1, len(headers))
+        self.assertEqual("Bearer " + base64.b64encode(b"user:token").decode("ascii"),
+                         headers[0][1])
+
+
+class CentralDeploymentListTest(unittest.TestCase):
+    """按 deploymentName 找回已有部署:唯一匹配 → 用它;零/多/查不出 → 各自处理。"""
+
+    NAME = "texel-v0.2.0"
+
+    def run_find(self, pages, page_size=50):
+        calls = {"n": 0}
+
+        def fetch(url, method="GET", auth=None, body=None, headers=None):
+            page = calls["n"]
+            calls["n"] += 1
+            payload = pages[page] if page < len(pages) else []
+            return (200, json.dumps({"deployments": payload}).encode("utf-8"))
+
+        return probes.central_deployments(name=self.NAME, fetch=fetch, page_size=page_size)
+
+    def payload(self, *entries):
+        return [{"deploymentId": "id-%d" % index, "deploymentName": name,
+                 "deploymentState": "PUBLISHING"}
+                for index, name in enumerate(entries)]
+
+    def test_exactly_one_match(self):
+        matches = self.run_find([self.payload("other", self.NAME)])
+        self.assertEqual(["id-1"], [item["id"] for item in matches])
+
+    def test_no_match(self):
+        self.assertEqual([], self.run_find([self.payload("other")]))
+
+    def test_several_matches_are_all_returned_so_the_caller_can_fail_closed(self):
+        matches = self.run_find([self.payload(self.NAME, self.NAME)])
+        self.assertEqual(2, len(matches))
+
+    def test_pagination_keeps_asking_while_pages_are_full(self):
+        first = [{"deploymentId": "f-%d" % index, "deploymentName": "other",
+                  "deploymentState": "PUBLISHED"} for index in range(2)]
+        second = self.payload(self.NAME)
+        matches = self.run_find([first, second], page_size=2)
+        self.assertEqual(["id-0"], [item["id"] for item in matches])
+
+    def test_bad_listing_is_a_probe_error(self):
+        for body, status in ((b"{}", 200), (b"[]", 500), (b'{"deployments": [{}]}', 200)):
+            with self.subTest(body=body, status=status):
+                with self.assertRaises(probes.ProbeError):
+                    probes.central_deployments(
+                        name=self.NAME,
+                        fetch=lambda url, method="GET", auth=None, body=body,
+                        status=status, **kw: (status, body))
+
+
 class CentralDeploymentStateTest(unittest.TestCase):
     """Portal 的部署状态机:PENDING/VALIDATING/PUBLISHING → PUBLISHED,或 → FAILED。
 
@@ -454,7 +564,7 @@ class WorkflowWiringTest(unittest.TestCase):
     def test_every_registry_probe_uses_the_tool(self):
         # 只数**命令行调用**,注释里提到文件名不算接线。
         # PyPI×2 + Central(repo1)×1 + central-status×1 + central-wait×2
-        self.assertEqual(7, self.text.count("python tools/release_probes.py"),
+        self.assertEqual(9, self.text.count("python tools/release_probes.py"),
                          "每一处注册表交互都必须走 release_probes.py")
 
     def test_the_deployment_artifact_can_be_replaced(self):
@@ -464,6 +574,13 @@ class WorkflowWiringTest(unittest.TestCase):
         self.assertIn("central-upload", self.text, "上传必须走 release_probes 的 Bearer 上传")
         self.assertNotIn("--user \"$CENTRAL_USERNAME", self.text,
                          "不能用会发 Basic 的 curl --user")
+
+    def test_an_existing_deployment_is_found_before_uploading(self):
+        # 没有保存的 id 时（artifact 没落盘），必须按固定 deploymentName 先找回已存在的
+        # 部署，唯一匹配就接着等，取不到/有歧义就关闭失败（审查 P1）。
+        self.assertIn("central-find --name", self.text)
+        self.assertIn('DEPLOYMENT_NAME="texel-${GITHUB_REF_NAME}"', self.text)
+        self.assertIn('"$find_rc" -ne 3', self.text)
 
     def test_rerun_branch_covers_every_deployment_state(self):
         """完整重跑分支：已发布→跳过、进行中→等到完成、明确失败→允许重传、查不出→红。"""

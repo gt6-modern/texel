@@ -282,6 +282,22 @@ jobs:
               esac
             fi
           fi
+          # 没有保存的 id 时还有第二个窗口：Portal 已经接受了 bundle，但 artifact 还没来得及
+          # 落盘（runner 被取消/artifact 故障），重跑手里就没有 id。此时按固定的
+          # deploymentName（`texel-<tag>`，上传时就是这个名字）去 Portal 的部署列表里找回：
+          # 唯一匹配 → 接着等它；一个都没有 → 才允许上传；多个 → 无法判断，关闭失败。
+          DEPLOYMENT_NAME="texel-${GITHUB_REF_NAME}"
+          if id=$(python tools/release_probes.py central-find --name "$DEPLOYMENT_NAME"); then
+            echo "Portal 上已有同名部署 $id，先等它完成"
+            python tools/release_probes.py central-wait --deployment-id "$id" --timeout 1800
+            echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          else
+            find_rc=$?
+            if [ "$find_rc" -ne 3 ]; then
+              echo "无法确认 Portal 上是否已有 $DEPLOYMENT_NAME 的部署（退出码 $find_rc），拒绝重复上传" >&2
+              exit 1
+            fi
+          fi
           bundle=$(find dist -name '*-central.zip' -print -quit)
           test -n "$bundle"
           version=$(basename "$bundle" | sed -e 's/^texel-//' -e 's/-central\.zip$//')

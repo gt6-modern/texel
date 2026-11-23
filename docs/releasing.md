@@ -183,7 +183,9 @@ are idempotent:
   never published while Central is still missing. On a rerun the saved id is asked
   first: already `PUBLISHED` → skip the upload, still in flight → wait for it
   instead of uploading again, explicitly `FAILED` → upload again, unknown → fail
-  closed. Without a saved id the job falls back to `repo1`, requiring **both**
+  closed. Without a saved id it asks Portal for deployments named `texel-<tag>`
+  first: exactly one match is resumed (never uploaded again), no match falls
+  through, several matches fail closed. Only then does it fall back to `repo1`, requiring **both**
   artifacts' POM *and* main JAR (`texel-core-X.Y.Z.pom` / `.jar`,
   `texel-cli-X.Y.Z.pom` / `.jar`), and it waits up to five minutes for a just
   accepted deployment to appear before calling the version unpublished.
