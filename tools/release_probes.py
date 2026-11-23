@@ -19,8 +19,11 @@
 """
 
 import argparse
+import base64
 import json
+import os
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -42,11 +45,22 @@ CENTRAL_FILES = (
 #: PyPI 上必须**两种**都存在:wheel 与 sdist。
 PYPI_KINDS = (("wheel", ".whl"), ("sdist", ".tar.gz"))
 
+#: Central Portal 的部署状态查询(POST + `id`)。状态机见发布手册 §6:
+#: PENDING → VALIDATING → PUBLISHING → PUBLISHED,或任意时刻 → FAILED。
+CENTRAL_STATUS = "https://central.sonatype.com/api/v1/publisher/status?id={deployment_id}"
+
 #: 视为"版本尚未发布"的唯一 HTTP 状态。
 NOT_FOUND = 404
 
 PUBLISHED = "published"
 MISSING = "missing"
+#: 部署还在路上(PENDING/VALIDATING/VALIDATED/PUBLISHING):既不是完成,也不是"没有"。
+IN_PROGRESS = "in-progress"
+#: 部署明确失败(FAILED):不是"没有",而是一个**已知坏的**部署。
+FAILED = "failed"
+
+#: 明确表示"还没到 Maven Central"的进行中状态。
+CENTRAL_PENDING_STATES = ("PENDING", "VALIDATING", "VALIDATED", "PUBLISHING")
 
 
 class ProbeError(Exception):
@@ -56,9 +70,22 @@ class ProbeError(Exception):
     """
 
 
-def fetch(url, timeout=30):
-    """GET 一个 URL,返回 ``(status, body)``;404 也返回,其它异常一律 ProbeError。"""
-    request = urllib.request.Request(url, method="GET")
+def central_auth(environ=None):
+    """Central Portal 的 Basic 认证(用户名:Portal token)。没有凭据时返回 None。"""
+    environment = os.environ if environ is None else environ
+    user = environment.get("CENTRAL_USERNAME")
+    password = environment.get("CENTRAL_PASSWORD")
+    if not user or not password:
+        return None
+    return (user, password)
+
+
+def fetch(url, timeout=30, method="GET", auth=None):
+    """请求一个 URL,返回 ``(status, body)``;404 也返回,其它异常一律 ProbeError。"""
+    request = urllib.request.Request(url, method=method)
+    if auth is not None:
+        token = base64.b64encode(("%s:%s" % auth).encode("utf-8")).decode("ascii")
+        request.add_header("Authorization", "Basic " + token)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             status = getattr(response, "status", None) or response.getcode()
@@ -112,9 +139,28 @@ def pypi_state(project, version, kinds=PYPI_KINDS, fetch=None):
     return PUBLISHED, "%s %s 已在 PyPI 上(wheel+sdist)" % (project, version)
 
 
-def central_state(version, artifacts=CENTRAL_ARTIFACTS, fetch=None):
-    """Central 上的发布是否**完整**:每个 artifact 的 POM 与主 JAR 都要在。"""
+def central_state(version, artifacts=CENTRAL_ARTIFACTS, fetch=None, wait=0.0, interval=20.0,
+                  sleep=None, clock=None):
+    """Central 上的发布是否**完整**:每个 artifact 的 POM 与主 JAR 都要在。
+
+    ``wait>0`` 时,若四个文件全都不在,会在 ``wait`` 秒内反复重查:刚被 Portal 接受、
+    还在 VALIDATING/PUBLISHING 的 bundle 在 repo1 上暂时全都 404,直接判 MISSING 会让
+    重跑再传一遍同一版本(审查 P1)。等窗口只影响"没看见文件"这一侧,看见就是看见。
+    """
     fetch = _resolved(fetch)
+    sleep = sleep if sleep is not None else time.sleep
+    clock = clock if clock is not None else time.monotonic
+    deadline = clock() + max(0.0, float(wait))
+    while True:
+        state, detail, present, absent = _central_files_state(version, artifacts, fetch)
+        if state != MISSING or clock() >= deadline:
+            if state == MISSING and wait > 0:
+                return MISSING, detail + "(已在 %.0f 秒内等待文件出现)" % float(wait)
+            return state, detail
+        sleep(max(0.0, float(interval)))
+
+
+def _central_files_state(version, artifacts, fetch):
     present = []
     absent = []
     for artifact in artifacts:
@@ -132,12 +178,69 @@ def central_state(version, artifacts=CENTRAL_ARTIFACTS, fetch=None):
                                  % (artifact, label, status))
     if not absent:
         return PUBLISHED, ("Central 上 %s %s 齐全(POM+主 JAR)"
-                           % ("/".join(artifacts), version))
+                           % ("/".join(artifacts), version)), present, absent
     if not present:
-        return MISSING, "Central 上还没有 %s %s" % ("/".join(artifacts), version)
+        return MISSING, ("Central 上还没有 %s %s" % ("/".join(artifacts), version)), present, absent
     raise ProbeError("%s %s 是**半发布**:已有 %s,缺 %s"
                      % ("/".join(artifacts), version,
                         ", ".join(present), ", ".join(absent)))
+
+
+def central_deployment_state(deployment_id, fetch=None, auth=None):
+    """问 Central Portal:这个 deployment 走到哪一步了。
+
+    上传接口返回 201 只代表**接受了 bundle**;之后还要经过 PENDING → VALIDATING →
+    PUBLISHING 才到达 PUBLISHED,也可能停在 FAILED。把"上传成功"当成"已发布"会让
+    GitHub Release 在 Central 最终失败之前就发出去(审查 P1)。
+    """
+    if not deployment_id or not str(deployment_id).strip():
+        raise ProbeError("缺少 deployment id:无法查询 Central 部署状态")
+    fetch = _resolved(fetch)
+    url = CENTRAL_STATUS.format(deployment_id=urllib.parse.quote(str(deployment_id).strip()))
+    status, body = fetch(url, method="POST", auth=auth)
+    if status != 200:
+        raise ProbeError("Central 部署状态查询返回 HTTP %d(部署 %s)"
+                         % (status, deployment_id))
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as failure:
+        raise ProbeError("Central 部署状态返回的不是 JSON(部署 %s): %s"
+                         % (deployment_id, failure))
+    if not isinstance(payload, dict):
+        raise ProbeError("Central 部署状态响应格式不对(部署 %s)" % deployment_id)
+    state = str(payload.get("deploymentState", "")).strip().upper()
+    if state == "PUBLISHED":
+        return PUBLISHED, "Central 部署 %s 已 PUBLISHED" % deployment_id
+    if state == "FAILED":
+        errors = payload.get("errors") or payload.get("error") or ""
+        return FAILED, "Central 部署 %s FAILED:%s" % (deployment_id, errors)
+    if state in CENTRAL_PENDING_STATES:
+        return IN_PROGRESS, "Central 部署 %s 处于 %s" % (deployment_id, state)
+    raise ProbeError("Central 部署 %s 的状态无法识别:%r" % (deployment_id, state))
+
+
+def central_wait(deployment_id, timeout=900.0, interval=20.0, fetch=None, auth=None,
+                 sleep=None, clock=None):
+    """等部署到 PUBLISHED 才算成功;FAILED 立刻失败,超时也算失败。
+
+    返回值是 ``(PUBLISHED, detail)``;任何"还没完成"的结果都抛 ``ProbeError``,
+    因为"等待超时"对发布流程来说就是"不知道",不能当成成功。
+    """
+    sleep = sleep if sleep is not None else time.sleep
+    clock = clock if clock is not None else time.monotonic
+    deadline = clock() + max(0.0, float(timeout))
+    last = "尚未查询"
+    while True:
+        state, detail = central_deployment_state(deployment_id, fetch=fetch, auth=auth)
+        if state == PUBLISHED:
+            return PUBLISHED, detail
+        if state == FAILED:
+            raise ProbeError(detail)
+        last = detail
+        if clock() >= deadline:
+            raise ProbeError("%s:等待 %.0f 秒仍未 PUBLISHED（最后一次: %s）"
+                             % (deployment_id, float(timeout), last))
+        sleep(max(0.0, float(interval)))
 
 
 def main(argv=None):
@@ -148,13 +251,36 @@ def main(argv=None):
     pypi.add_argument("--version", required=True)
     central = subparsers.add_parser("central")
     central.add_argument("--version", required=True)
+    central.add_argument("--wait-visible", type=float, default=0.0,
+                         help="四个文件全 404 时,在这个秒数内重查(给刚上传的部署一点时间)")
+    central.add_argument("--interval", type=float, default=20.0)
+    wait = subparsers.add_parser("central-wait", help="等 Portal 部署到 PUBLISHED")
+    wait.add_argument("--deployment-id", required=True)
+    wait.add_argument("--timeout", type=float, default=900.0)
+    wait.add_argument("--interval", type=float, default=20.0)
+    status = subparsers.add_parser("central-status", help="只查一次部署状态")
+    status.add_argument("--deployment-id", required=True)
     arguments = parser.parse_args(argv)
 
     try:
+        if arguments.command == "central-status":
+            # 退出码就是给 shell 用的协议:0 已发布 / 3 进行中 / 4 明确失败 / 1 查不出来。
+            state, detail = central_deployment_state(arguments.deployment_id,
+                                                     auth=central_auth())
+            sys.stderr.write("release-probe: %s\n" % detail)
+            return {"published": 0, "in-progress": 3, "failed": 4}.get(state, 1)
+        if arguments.command == "central-wait":
+            # 上传接口 201 只代表"接受了 bundle";必须等到 PUBLISHED 才算发布完成。
+            central_wait(arguments.deployment_id, timeout=arguments.timeout,
+                         interval=arguments.interval, auth=central_auth())
+            sys.stderr.write("release-probe: 部署 %s 已 PUBLISHED\n" % arguments.deployment_id)
+            return 0
         if arguments.command == "pypi":
             state, detail = pypi_state(arguments.project, arguments.version)
         else:
-            state, detail = central_state(arguments.version)
+            state, detail = central_state(arguments.version,
+                                          wait=arguments.wait_visible,
+                                          interval=arguments.interval)
     except ProbeError as failure:
         # 关闭失败:不知道就不许继续上传。
         sys.stderr.write("release-probe: %s\n" % failure)

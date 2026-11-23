@@ -171,10 +171,19 @@ registries recorded — they must be the same bytes.
 Re-run the failed jobs of the same run rather than moving the tag. All three uploads
 are idempotent:
 
-- Central: the job probes `repo1` for **both** artifacts' POM *and* main JAR
-  (`texel-core-X.Y.Z.pom` / `.jar`, `texel-cli-X.Y.Z.pom` / `.jar`) and skips the
-  upload only when all four are present. A version with some of them missing is a
-  partial publication and fails the job instead of skipping the upload.
+- Central: publishing is asynchronous. The upload endpoint returning 201 only means
+  the bundle was *accepted*; the deployment then goes `PENDING` → `VALIDATING` →
+  `PUBLISHING` before it reaches `PUBLISHED`, and can end in `FAILED`. The job
+  therefore keeps the **deployment id** (upload response body, stored as an
+  artifact), polls `/api/v1/publisher/status?id=…` until `PUBLISHED`, and fails on
+  `FAILED` or timeout — `github-release` depends on that job, so a release page is
+  never published while Central is still missing. On a rerun the saved id is asked
+  first: already `PUBLISHED` → skip the upload, still in flight → wait for it
+  instead of uploading again, explicitly `FAILED` → upload again, unknown → fail
+  closed. Without a saved id the job falls back to `repo1`, requiring **both**
+  artifacts' POM *and* main JAR (`texel-core-X.Y.Z.pom` / `.jar`,
+  `texel-cli-X.Y.Z.pom` / `.jar`), and it waits up to five minutes for a just
+  accepted deployment to appear before calling the version unpublished.
 - PyPI: each job probes `https://pypi.org/pypi/<project>/X.Y.Z/json` and skips the
   upload only when the version page lists **both** a wheel and an sdist; anything
   other than a confirmed 404 (TLS, DNS, 403, 429, 5xx) fails the job.

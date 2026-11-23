@@ -154,6 +154,9 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: python-distributions-importer
@@ -192,6 +195,9 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: python-distributions-compiler
@@ -225,26 +231,65 @@ jobs:
     environment: maven-central
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: central-bundle
           path: dist
+      # 上一次运行（同一 run 的重跑）留下的部署 id：有就接着用，绝不重复上传同一版本。
+      - name: Recover an in-flight deployment from this run
+        id: recovered
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: central-deployment
+          path: central-deployment
       - name: Skip when this version is already on Central
         id: released
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
         shell: bash
         run: |
-          # 发布必须可重跑：同一个版本已经进了 Central 之后再传一次会被拒（"already exists"），
-          # 那样重跑就永远绿不了。这里先问 repo1（公开、不需要凭据），已存在就跳过上传。
+          # 发布必须可重跑，而 Central 的发布是**异步**的：上传接口 201 只代表"接受了
+          # bundle"，之后还要 PENDING → VALIDATING → PUBLISHING 才到 PUBLISHED，也可能
+          # FAILED。所以判据分两层（审查 P1）：
           #
-          # 判据在 tools/release_probes.py：只有 404 算未发布；200 还要求 texel-core 与
-          # texel-cli **两个** artifact 的 **POM 与主 JAR** 都在（只探 core 会把"core 在、
-          # cli 不在"当成完成 —— 审查 #20；只看 POM 会把"POM 传了、JAR 没传"当成完成）；
-          # 其它状态一律让 job 红（审查 #21）。
+          # 1. 上一次运行留下的 deployment id 还在 → 先问它的状态：
+          #    已 PUBLISHED → 跳过上传；还在进行中 → 等它 PUBLISHED 再跳过（绝不重传）；
+          #    明确 FAILED → 允许重新上传；查不出来 → job 红（"不知道"不是"没有"）。
+          # 2. 没有 id（全新一次运行）→ 问 repo1：texel-core 与 texel-cli 的 POM 与主 JAR
+          #    四个文件都在才算已发布；全 404 时再给 5 分钟等文件出现，避免"刚被接受、
+          #    还没在 repo1 可见"被当成"没发布"再传一遍。
+          if [ "${{ steps.recovered.outcome }}" = "success" ] \
+             && [ -f central-deployment/deployment-id.txt ]; then
+            id=$(tr -d '[:space:]' < central-deployment/deployment-id.txt)
+            if [ -n "$id" ]; then
+              set +e
+              python tools/release_probes.py central-status --deployment-id "$id"
+              rc=$?
+              set -e
+              case "$rc" in
+                0) echo "skip=true" >> "$GITHUB_OUTPUT"
+                   echo "上一次的部署 $id 已 PUBLISHED，跳过上传"; exit 0 ;;
+                3) echo "上一次的部署 $id 仍在进行中，先等它完成"
+                   python tools/release_probes.py central-wait --deployment-id "$id" --timeout 1800
+                   echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0 ;;
+                4) echo "上一次的部署 $id 明确 FAILED，允许重新上传" >&2 ;;
+                *) echo "无法确认上一次部署 $id 的状态，拒绝重复上传" >&2; exit 1 ;;
+              esac
+            fi
+          fi
           bundle=$(find dist -name '*-central.zip' -print -quit)
           test -n "$bundle"
           version=$(basename "$bundle" | sed -e 's/^texel-//' -e 's/-central\.zip$//')
-          python tools/release_probes.py central --version "$version" >> "$GITHUB_OUTPUT"
+          # 判据在 tools/release_probes.py：四个文件都要在；其它状态一律让 job 红（#20/#21）。
+          python tools/release_probes.py central --version "$version" \
+            --wait-visible 300 --interval 20 >> "$GITHUB_OUTPUT"
       - name: Upload Central Portal bundle
+        id: upload
         if: steps.released.outputs.skip != 'true'
         env:
           CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
@@ -253,9 +298,33 @@ jobs:
         run: |
           bundle=$(find dist -name '*-central.zip' -print -quit)
           test -n "$bundle"
-          curl --fail-with-body --user "$CENTRAL_USERNAME:$CENTRAL_PASSWORD" \
+          # 响应体就是 deployment id：必须留住它，否则重跑只能靠 repo1 可见性猜。
+          curl -fsS --user "$CENTRAL_USERNAME:$CENTRAL_PASSWORD" \
             --form bundle="@$bundle" \
-            "https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC&name=texel-${GITHUB_REF_NAME}"
+            "https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC&name=texel-${GITHUB_REF_NAME}" \
+            > deployment-id.txt
+          id=$(tr -d '[:space:]' < deployment-id.txt)
+          test -n "$id"
+          echo "Central 接受了 bundle，部署 id = $id"
+          echo "deployment_id=$id" >> "$GITHUB_OUTPUT"
+      - name: Keep the deployment id for a rerun
+        if: always() && steps.upload.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: central-deployment
+          path: deployment-id.txt
+          if-no-files-found: error
+      - name: Wait until the deployment is PUBLISHED
+        if: steps.released.outputs.skip != 'true'
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+          DEPLOYMENT_ID: ${{ steps.upload.outputs.deployment_id }}
+        shell: bash
+        run: |
+          # 上传成功 ≠ 发布成功：只有 PUBLISHED 才是"已到 Maven Central"。FAILED 或超时
+          # 都会让这个 job 红，从而挡住依赖它的 github-release（审查 P1）。
+          python tools/release_probes.py central-wait --deployment-id "$DEPLOYMENT_ID" --timeout 1800
 
   github-release:
     # 真正的发布只发生在 tag 上：tag 推送，或手动触发且 dry_run == false（且当前 ref 是 tag）。
