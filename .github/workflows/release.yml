@@ -298,8 +298,13 @@ jobs:
         run: |
           bundle=$(find dist -name '*-central.zip' -print -quit)
           test -n "$bundle"
+          # Portal 的契约是 `Authorization: Bearer <base64(user:token)>`，不是 Basic
+          # （`curl --user` 发的是 Basic，状态轮询会被 401）。头的构造只在
+          # `tools/release_probes.py` 的 authorization_header() 里写一次，这里直接取用。
+          auth=$(python tools/release_probes.py central-auth)
+          test -n "$auth"
           # 响应体就是 deployment id：必须留住它，否则重跑只能靠 repo1 可见性猜。
-          curl -fsS --user "$CENTRAL_USERNAME:$CENTRAL_PASSWORD" \
+          curl -fsS -H "Authorization: $auth" \
             --form bundle="@$bundle" \
             "https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC&name=texel-${GITHUB_REF_NAME}" \
             > deployment-id.txt
@@ -314,6 +319,10 @@ jobs:
           name: central-deployment
           path: deployment-id.txt
           if-no-files-found: error
+          # upload-artifact@v4 的 overwrite 默认 false：同一 run 里 FAILED 后重传会产生
+          # 第二个 id，不覆盖就会让这一步失败、后续 wait 不执行、旧 id 永远指向坏部署，
+          # 下一次重跑又再传一遍（审查 P1）。
+          overwrite: true
       - name: Wait until the deployment is PUBLISHED
         if: steps.released.outputs.skip != 'true'
         env:

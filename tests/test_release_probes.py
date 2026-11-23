@@ -10,11 +10,14 @@
 这里用注入的 `fetch` 跑真判据,不发任何网络请求。
 """
 
+import base64
 import io
 import json
+import os
 import sys
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -169,6 +172,62 @@ class CentralProbeTest(unittest.TestCase):
                         VERSION, fetch=self.both((200, b"<pom/>"), (status, b"")))
 
 
+class CentralAuthorizationTest(unittest.TestCase):
+    """Portal 要 `Authorization: Bearer <base64(user:token)>`，不是 Basic。"""
+
+    def test_fetch_sends_a_bearer_token(self):
+        seen = {}
+
+        class Response(object):
+            status = 200
+
+            def read(self):
+                return b"{}"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        def fake_urlopen(request, timeout=None):
+            seen["header"] = request.get_header("Authorization")
+            seen["method"] = request.get_method()
+            return Response()
+
+        original = probes.urllib.request.urlopen
+        probes.urllib.request.urlopen = fake_urlopen
+        try:
+            status, _body = probes.fetch("https://example.invalid/x", method="POST",
+                                          auth=("user", "token"))
+        finally:
+            probes.urllib.request.urlopen = original
+        self.assertEqual(200, status)
+        self.assertEqual("POST", seen["method"])
+        expected = "Bearer " + base64.b64encode(b"user:token").decode("ascii")
+        self.assertEqual(expected, seen["header"])
+        self.assertNotIn("Basic", seen["header"] or "")
+
+    def test_the_header_construction_is_shared_with_the_workflow(self):
+        environment = {"CENTRAL_USERNAME": "user", "CENTRAL_PASSWORD": "token"}
+        with mock.patch.dict(os.environ, environment, clear=False):
+            header = probes.authorization_header()
+            out, err = io.StringIO(), io.StringIO()
+            with redirect_stdout(out), redirect_stderr(err):
+                code = probes.main(["central-auth"])
+        self.assertEqual(0, code, err.getvalue())
+        self.assertTrue(header.startswith("Bearer "))
+        self.assertEqual(header, out.getvalue(), "工作流拿到的必须与 fetch 发的是同一个头")
+
+    def test_missing_credentials_fail_closed(self):
+        with mock.patch.dict(os.environ, {"CENTRAL_USERNAME": "", "CENTRAL_PASSWORD": ""}):
+            out, err = io.StringIO(), io.StringIO()
+            with redirect_stdout(out), redirect_stderr(err):
+                code = probes.main(["central-auth"])
+        self.assertEqual(1, code, "没有凭据就不能拼出空头继续跑")
+        self.assertEqual("", out.getvalue())
+
+
 class CentralDeploymentStateTest(unittest.TestCase):
     """Portal 的部署状态机:PENDING/VALIDATING/PUBLISHING → PUBLISHED,或 → FAILED。
 
@@ -290,6 +349,10 @@ class ReleaseDocParityTest(unittest.TestCase):
             suffix = pattern.split("{version}", 1)[1]
             self.assertIn(suffix, section, "文档没提 %s（%s）" % (label, suffix))
 
+    def test_setup_section_names_the_bearer_scheme(self):
+        text = self.DOC.read_text(encoding="utf-8")
+        self.assertIn("Bearer", text, "发布手册必须写明 Portal 要的是 Bearer token")
+
     def test_central_bullet_describes_the_deployment_wait(self):
         section = self.section()
         for needle in ("deployment", "PUBLISHED", "FAILED", "artifact"):
@@ -315,8 +378,24 @@ class WorkflowWiringTest(unittest.TestCase):
     def test_every_registry_probe_uses_the_tool(self):
         # 只数**命令行调用**,注释里提到文件名不算接线。
         # PyPI×2 + Central(repo1)×1 + central-status×1 + central-wait×2
-        self.assertEqual(6, self.text.count("python tools/release_probes.py"),
+        self.assertEqual(7, self.text.count("python tools/release_probes.py"),
                          "每一处注册表交互都必须走 release_probes.py")
+
+    def test_the_deployment_artifact_can_be_replaced(self):
+        # FAILED 后重传会得到新的 id；不覆盖 artifact 就会在同一 run 里失败，
+        # 旧 id 永远指向坏部署，下一次重跑又再传一遍（审查 P1）。
+        self.assertIn("overwrite: true", self.text)
+        self.assertIn("Authorization: $auth", self.text, "上传必须用 Bearer 头")
+
+    def test_rerun_branch_covers_every_deployment_state(self):
+        """完整重跑分支：已发布→跳过、进行中→等到完成、明确失败→允许重传、查不出→红。"""
+        for needle in ('case "$rc" in',
+                       '0) echo "skip=true"',
+                       '3) echo',
+                       '4) echo',
+                       '*) echo "无法确认',
+                       'exit 1 ;;'):
+            self.assertIn(needle, self.text, "重跑分支缺少: " + needle)
 
     def test_central_publish_waits_for_published(self):
         # 上传接口 201 只代表"接受了 bundle":必须等部署到 PUBLISHED 才算发布完成，

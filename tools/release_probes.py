@@ -71,7 +71,7 @@ class ProbeError(Exception):
 
 
 def central_auth(environ=None):
-    """Central Portal 的 Basic 认证(用户名:Portal token)。没有凭据时返回 None。"""
+    """Central Portal 的凭据(用户名:Portal token)。没有凭据时返回 None。"""
     environment = os.environ if environ is None else environ
     user = environment.get("CENTRAL_USERNAME")
     password = environment.get("CENTRAL_PASSWORD")
@@ -80,12 +80,26 @@ def central_auth(environ=None):
     return (user, password)
 
 
+def authorization_header(auth=None):
+    """Central Portal 的 ``Authorization`` 头。
+
+    官方契约是 **`Bearer <base64(username:portal-token)>`**(另有一个非标准的
+    `UserToken` 兼容写法),**不是** HTTP Basic。上传与状态查询必须用同一个构造,
+    否则状态轮询会被 401 拒绝、每次 Central 发布都卡在等待阶段(审查 P1)。
+    """
+    credentials = central_auth() if auth is None else auth
+    if credentials is None:
+        return None
+    token = base64.b64encode(("%s:%s" % credentials).encode("utf-8")).decode("ascii")
+    return "Bearer " + token
+
+
 def fetch(url, timeout=30, method="GET", auth=None):
     """请求一个 URL,返回 ``(status, body)``;404 也返回,其它异常一律 ProbeError。"""
     request = urllib.request.Request(url, method=method)
-    if auth is not None:
-        token = base64.b64encode(("%s:%s" % auth).encode("utf-8")).decode("ascii")
-        request.add_header("Authorization", "Basic " + token)
+    header = authorization_header(auth)
+    if header is not None:
+        request.add_header("Authorization", header)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             status = getattr(response, "status", None) or response.getcode()
@@ -260,9 +274,18 @@ def main(argv=None):
     wait.add_argument("--interval", type=float, default=20.0)
     status = subparsers.add_parser("central-status", help="只查一次部署状态")
     status.add_argument("--deployment-id", required=True)
+    subparsers.add_parser("central-auth", help="打印 Authorization 头的值(Bearer …)")
     arguments = parser.parse_args(argv)
 
     try:
+        if arguments.command == "central-auth":
+            # 上传步骤用它拼同一个头:构造只在 authorization_header() 里写一次。
+            header = authorization_header()
+            if header is None:
+                sys.stderr.write("release-probe: 缺少 CENTRAL_USERNAME/CENTRAL_PASSWORD\n")
+                return 1
+            sys.stdout.write(header)
+            return 0
         if arguments.command == "central-status":
             # 退出码就是给 shell 用的协议:0 已发布 / 3 进行中 / 4 明确失败 / 1 查不出来。
             state, detail = central_deployment_state(arguments.deployment_id,

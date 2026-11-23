@@ -18,6 +18,9 @@ replaced: ship a patch instead.
    through ownership of the GitHub organisation).
 2. Generate a Portal **user token** (not your login password) and store it as the
    `maven-central` environment secrets `CENTRAL_USERNAME` and `CENTRAL_PASSWORD`.
+   The Portal API expects `Authorization: Bearer <base64(username:token)>` for both
+   the upload and the status query (`tools/release_probes.py` builds that one header;
+   plain HTTP Basic is *not* part of the documented contract).
 3. Create a signing key and store it as the `release` environment secrets
    `MAVEN_GPG_PRIVATE_KEY` (the whole armor, including the BEGIN/END lines) and
    `MAVEN_GPG_PASSPHRASE`.
