@@ -56,7 +56,7 @@ CENTRAL_UPLOAD = ("https://central.sonatype.com/api/v1/publisher/upload"
                   "?publishingType=AUTOMATIC&name={name}")
 #: 列出某个 namespace 下的部署(带分页)。用在"没有保存的 id"时按 deploymentsName 找回。
 CENTRAL_DEPLOYMENTS = ("https://central.sonatype.com/api/v1/publisher/deployments"
-                       "?namespace={namespace}&page={page}&size={size}")
+                       "?namespace={namespace}&page={page}&size={size}{name_filter}")
 #: 本仓库在 Central 上的 namespace。
 CENTRAL_NAMESPACE = "io.github.gt6-modern"
 
@@ -271,10 +271,19 @@ def central_deployments(name=None, namespace=CENTRAL_NAMESPACE, fetch=None, auth
     """
     fetch = _resolved(fetch)
     matches = []
-    for page in range(max_pages):
+    # 服务端过滤是**子串**匹配且参数名没有本地可验证的来源:先带上,遇到 4xx 就退回全量
+    # 分页(本地仍做精确同名匹配,所以语义不变,只是多读几页)。
+    name_filter = ("&deploymentName=" + urllib.parse.quote(name)) if name else ""
+    page = 0
+    while page < max_pages:
         url = CENTRAL_DEPLOYMENTS.format(namespace=urllib.parse.quote(namespace),
-                                         page=page, size=page_size)
+                                         page=page, size=page_size, name_filter=name_filter)
         status, body = fetch(url, auth=_portal_auth(auth))
+        if status in (400, 415, 422) and name_filter:
+            sys.stderr.write("release-probe: 部署列表不接受 deploymentName 过滤(%d)，退回全量分页\n"
+                             % status)
+            name_filter = ""
+            continue        # 同一页重试,不消耗页预算
         if status != 200:
             raise ProbeError("Central 部署列表返回 HTTP %d" % status)
         try:
@@ -297,6 +306,7 @@ def central_deployments(name=None, namespace=CENTRAL_NAMESPACE, fetch=None, auth
                                 "state": entry.get("deploymentState")})
         if _last_page(payload, entries, page, page_size):
             return matches
+        page += 1
     # 页数用尽而末页仍是满页:无法证明后面没有更多记录。返回一个"看起来完整"的结果会让
     # 调用方把"没找到"当成"不存在"、把"一个"当成"唯一"（审查 P2）——只能关闭失败。
     raise ProbeError("Central 部署列表读了 %d 页仍未结束，无法确认同名部署是否唯一"
@@ -304,14 +314,29 @@ def central_deployments(name=None, namespace=CENTRAL_NAMESPACE, fetch=None, auth
 
 
 def _last_page(payload, entries, page, page_size):
-    """这一页是不是最后一页:优先用服务端给的总页数,否则按"满页即可能还有"判断。"""
+    """这一页是不是最后一页。
+
+    Sonatype 的部署列表把分页元数据放在**顶层**,字段是
+    ``page`` / ``pageSize`` / ``pageCount`` / ``totalResultCount``——不是 ``totalPages``,
+    也不是嵌套的 ``page.totalPages``。认错字段的后果是:服务端已经说"这是最后一页"时还在
+    继续翻页,于是"结果正好占满 max_pages"会被误判成"读不全"而抛错,发布永久卡在恢复步骤
+    (审查 P2)。``totalPages`` / ``total_pages`` 只作为兼容兜底保留。
+    """
     if isinstance(payload, dict):
+        page_count = payload.get("pageCount")
+        if isinstance(page_count, int) and page_count > 0:
+            return page + 1 >= page_count
+        total_results = payload.get("totalResultCount")
+        if isinstance(total_results, int) and total_results >= 0:
+            size = payload.get("pageSize")
+            size = size if isinstance(size, int) and size > 0 else page_size
+            return (page + 1) * size >= total_results
         for holder in (payload, payload.get("page")):
             if not isinstance(holder, dict):
                 continue
             for key in ("totalPages", "total_pages"):
                 total = holder.get(key)
-                if isinstance(total, int):
+                if isinstance(total, int) and total > 0:
                     return page + 1 >= total
     return len(entries) < page_size
 

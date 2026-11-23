@@ -430,6 +430,56 @@ class CentralDeploymentListTest(unittest.TestCase):
                                              page_size=1, max_pages=5)
         self.assertEqual([], matches)
 
+    def test_official_pagecount_shape_stops_on_the_last_page(self):
+        # Sonatype 的真实形状:顶层 page / pageSize / pageCount / totalResultCount。
+        # 结果正好占满 max_pages 时也必须正常返回,不能误报"读不全"（审查 P2）。
+        calls = []
+
+        def fetch(url, method="GET", auth=None, body=None, headers=None):
+            calls.append(url)
+            page = int(url.split("page=")[1].split("&")[0])
+            entries = [{"deploymentId": "p%d-%d" % (page, index),
+                        "deploymentName": self.NAME if (page == 0 and index == 0) else "other",
+                        "deploymentState": "PUBLISHED"} for index in range(2)]
+            payload = {"deployments": entries, "page": page, "pageSize": 2,
+                       "pageCount": 20}
+            return (200, json.dumps(payload).encode("utf-8"))
+
+        matches = probes.central_deployments(name=self.NAME, fetch=fetch,
+                                             page_size=2, max_pages=20)
+        self.assertEqual(["p0-0"], [item["id"] for item in matches])
+        self.assertEqual(20, len(calls), "pageCount 已经是最后一页就必须停在第 20 页")
+
+    def test_total_result_count_shape_also_stops(self):
+        def fetch(url, method="GET", auth=None, body=None, headers=None):
+            page = int(url.split("page=")[1].split("&")[0])
+            payload = {"deployments": [{"deploymentId": "x-%d" % page,
+                                        "deploymentName": "other",
+                                        "deploymentState": "PUBLISHED"}],
+                       "page": page, "pageSize": 1, "totalResultCount": 2}
+            return (200, json.dumps(payload).encode("utf-8"))
+
+        matches = probes.central_deployments(name=self.NAME, fetch=fetch,
+                                             page_size=1, max_pages=10)
+        self.assertEqual([], matches)
+
+    def test_the_name_filter_is_sent_and_falls_back_when_refused(self):
+        seen = []
+
+        def fetch(url, method="GET", auth=None, body=None, headers=None):
+            seen.append(url)
+            if "deploymentName=" in url:
+                return (400, b"")
+            return (200, json.dumps({"deployments": [
+                {"deploymentId": "id-1", "deploymentName": self.NAME,
+                 "deploymentState": "PUBLISHED"}],
+                "page": 0, "pageSize": 50, "pageCount": 1}).encode("utf-8"))
+
+        matches = probes.central_deployments(name=self.NAME, fetch=fetch)
+        self.assertEqual(["id-1"], [item["id"] for item in matches])
+        self.assertIn("deploymentName=", seen[0], "先尝试服务端同名过滤")
+        self.assertNotIn("deploymentName=", seen[1], "被拒后必须退回全量分页")
+
     def test_bad_listing_is_a_probe_error(self):
         for body, status in ((b"{}", 200), (b"[]", 500), (b'{"deployments": [{}]}', 200)):
             with self.subTest(body=body, status=status):
