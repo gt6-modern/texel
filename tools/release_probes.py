@@ -7,8 +7,10 @@
   和真正的 404 全塞进同一个 `else`,于是基础设施故障会被当成"版本不存在",发布流程
   接着去做**不可幂等**的上传,错误归因还会指向上传而不是探测。
 * **"已发布"必须按完整资产集验证**(#20)。PyPI 只看版本 JSON 端点是不是 200,就会把
-  "wheel 传上去了、sdist 失败了"这种半发布当成完成;Central 只看 `texel-core` 的 POM,
-  就会把"core 在、cli 不在"当成完成。两者都会让重跑跳过上传、留下缺件的版本。
+  "wheel 传上去了、sdist 失败了"这种半发布当成完成;Central 只看某一个 artifact 的 POM,
+  就会把"另一个 artifact 不在"或"POM 在、主 JAR 不在"当成完成。现在的判据是:PyPI 的
+  wheel 与 sdist **都**要在,Central 的 `texel-core` 与 `texel-cli` **每个**都要有 POM
+  与主 JAR。缺任何一件都让 job 红,而不是跳过上传、留下缺件的版本。
 
 用法(工作流直接消费 stdout 的 ``skip=`` 行):
 

@@ -171,10 +171,13 @@ registries recorded — they must be the same bytes.
 Re-run the failed jobs of the same run rather than moving the tag. All three uploads
 are idempotent:
 
-- Central: the job probes `repo1` for `texel-core-X.Y.Z.pom` and skips the upload
-  when the version is already published.
+- Central: the job probes `repo1` for **both** artifacts' POM *and* main JAR
+  (`texel-core-X.Y.Z.pom` / `.jar`, `texel-cli-X.Y.Z.pom` / `.jar`) and skips the
+  upload only when all four are present. A version with some of them missing is a
+  partial publication and fails the job instead of skipping the upload.
 - PyPI: each job probes `https://pypi.org/pypi/<project>/X.Y.Z/json` and skips the
-  upload when the version is already there.
+  upload only when the version page lists **both** a wheel and an sdist; anything
+  other than a confirmed 404 (TLS, DNS, 403, 429, 5xx) fails the job.
 - GitHub Release: HTTP 404 plus an authenticated, fully paginated listing with no matching release creates a draft; an existing draft is deleted without
   deleting its tag, then rebuilt from this run's artifacts. All asset names,
   sizes, upload states and SHA-256 digests must match before publication.

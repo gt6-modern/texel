@@ -168,6 +168,36 @@ class CentralProbeTest(unittest.TestCase):
                         VERSION, fetch=self.both((200, b"<pom/>"), (status, b"")))
 
 
+class ReleaseDocParityTest(unittest.TestCase):
+    """重跑说明必须与探测实现同一条规则。
+
+    文档写旧规则（"只探 texel-core 的 POM"）会把排障引向错误的结论：漏掉"另一个
+    artifact 不在"和"主 JAR 不在"这两种半发布（审查）。
+    """
+
+    DOC = ROOT / "docs" / "releasing.md"
+
+    def section(self):
+        text = self.DOC.read_text(encoding="utf-8")
+        start = text.index("## 6. Re-running a failed release")
+        rest = text[start + 1:]
+        end = rest.find("## ")
+        return rest if end < 0 else rest[:end]
+
+    def test_central_bullet_names_every_artifact_and_file(self):
+        section = self.section()
+        for artifact in probes.CENTRAL_ARTIFACTS:
+            self.assertIn(artifact, section, "文档没提 Central 上的 " + artifact)
+        for label, pattern in probes.CENTRAL_FILES:
+            suffix = pattern.split("{version}", 1)[1]
+            self.assertIn(suffix, section, "文档没提 %s（%s）" % (label, suffix))
+
+    def test_pypi_bullet_names_both_distributions(self):
+        section = self.section()
+        for label, _suffix in probes.PYPI_KINDS:
+            self.assertIn(label, section, "文档没提 PyPI 的 " + label)
+
+
 class WorkflowWiringTest(unittest.TestCase):
     """判据真的接在工作流里了吗?—— 只测函数不测接线,门禁可以绿而流程照旧坏。"""
 
