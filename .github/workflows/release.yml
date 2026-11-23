@@ -298,17 +298,15 @@ jobs:
         run: |
           bundle=$(find dist -name '*-central.zip' -print -quit)
           test -n "$bundle"
-          # Portal 的契约是 `Authorization: Bearer <base64(user:token)>`，不是 Basic
-          # （`curl --user` 发的是 Basic，状态轮询会被 401）。头的构造只在
-          # `tools/release_probes.py` 的 authorization_header() 里写一次，这里直接取用。
-          auth=$(python tools/release_probes.py central-auth)
-          test -n "$auth"
-          # 响应体就是 deployment id：必须留住它，否则重跑只能靠 repo1 可见性猜。
-          curl -fsS -H "Authorization: $auth" \
-            --form bundle="@$bundle" \
-            "https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC&name=texel-${GITHUB_REF_NAME}" \
-            > deployment-id.txt
-          id=$(tr -d '[:space:]' < deployment-id.txt)
+          # 上传与状态查询都在 tools/release_probes.py 里完成：Portal 要的是
+          # `Authorization: Bearer <base64(user:token)>`（`curl --user` 发的是 Basic，
+          # 状态轮询会被 401）；凭据只待在请求头里，stdout 只有 deployment id，
+          # 不会把 base64 凭据写进构建日志（GitHub 的掩码盖不住它）。
+          id=$(python tools/release_probes.py central-upload \
+                 --bundle "$bundle" --name "texel-${GITHUB_REF_NAME}")
+          test -n "$id"
+          # deployment id 必须留住：否则重跑只能靠 repo1 可见性猜。
+          echo "$id" > deployment-id.txt
           test -n "$id"
           echo "Central 接受了 bundle，部署 id = $id"
           echo "deployment_id=$id" >> "$GITHUB_OUTPUT"

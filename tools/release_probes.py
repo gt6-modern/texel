@@ -25,7 +25,10 @@ import os
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
+
+from pathlib import Path
 
 PYPI_JSON = "https://pypi.org/pypi/{project}/{version}/json"
 #: Central 上 artifact 目录下的**某个文件**:`.../<artifact>/<version>/<name>`。
@@ -48,6 +51,9 @@ PYPI_KINDS = (("wheel", ".whl"), ("sdist", ".tar.gz"))
 #: Central Portal 的部署状态查询(POST + `id`)。状态机见发布手册 §6:
 #: PENDING → VALIDATING → PUBLISHING → PUBLISHED,或任意时刻 → FAILED。
 CENTRAL_STATUS = "https://central.sonatype.com/api/v1/publisher/status?id={deployment_id}"
+#: 上传 bundle。响应体就是 deployment id。
+CENTRAL_UPLOAD = ("https://central.sonatype.com/api/v1/publisher/upload"
+                  "?publishingType=AUTOMATIC&name={name}")
 
 #: 视为"版本尚未发布"的唯一 HTTP 状态。
 NOT_FOUND = 404
@@ -94,12 +100,14 @@ def authorization_header(auth=None):
     return "Bearer " + token
 
 
-def fetch(url, timeout=30, method="GET", auth=None):
+def fetch(url, timeout=30, method="GET", auth=None, body=None, headers=None):
     """请求一个 URL,返回 ``(status, body)``;404 也返回,其它异常一律 ProbeError。"""
-    request = urllib.request.Request(url, method=method)
+    request = urllib.request.Request(url, data=body, method=method)
     header = authorization_header(auth)
     if header is not None:
         request.add_header("Authorization", header)
+    for name, value in (headers or {}).items():
+        request.add_header(name, value)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             status = getattr(response, "status", None) or response.getcode()
@@ -200,6 +208,43 @@ def _central_files_state(version, artifacts, fetch):
                         ", ".join(present), ", ".join(absent)))
 
 
+#: multipart 的固定 boundary:上传体要可复现,不需要随机。
+CENTRAL_UPLOAD_BOUNDARY = "texel-central-bundle-boundary"
+
+
+def central_upload(bundle_path, name, fetch=None, auth=None):
+    """把 bundle 上传给 Central Portal,返回 deployment id。
+
+    上传放在这里、而不是工作流里的 `curl --user`,有两个理由:
+
+    * Portal 要的是 `Authorization: Bearer <base64(user:token)>`,而 `curl --user` 发 Basic;
+    * 不能让凭据出现在 stdout 里。把"构造好的头"打到 stdout 再让 shell 取用,CodeQL 会
+      正确地报"clear-text logging of sensitive information"——那是真的会把 base64 凭据写进
+      构建日志(它不等于 secret 原文,GitHub 的掩码盖不住)。所以只有 id 出去。
+    """
+    fetch = _resolved(fetch)
+    payload = Path(bundle_path).read_bytes()
+    filename = Path(bundle_path).name
+    body = b"".join([
+        b"--", CENTRAL_UPLOAD_BOUNDARY.encode("ascii"), b"\r\n",
+        b'Content-Disposition: form-data; name="bundle"; filename="',
+        filename.encode("utf-8"), b'"\r\n',
+        b"Content-Type: application/octet-stream\r\n\r\n",
+        payload,
+        b"\r\n--", CENTRAL_UPLOAD_BOUNDARY.encode("ascii"), b"--\r\n",
+    ])
+    url = CENTRAL_UPLOAD.format(name=urllib.parse.quote(name))
+    status, response = fetch(
+        url, method="POST", auth=auth, body=body,
+        headers={"Content-Type": "multipart/form-data; boundary=" + CENTRAL_UPLOAD_BOUNDARY})
+    if status not in (200, 201):
+        raise ProbeError("Central 上传返回 HTTP %d" % status)
+    deployment_id = response.decode("utf-8", "replace").strip()
+    if not deployment_id:
+        raise ProbeError("Central 接受了 bundle 却没有给出 deployment id")
+    return deployment_id
+
+
 def central_deployment_state(deployment_id, fetch=None, auth=None):
     """问 Central Portal:这个 deployment 走到哪一步了。
 
@@ -274,17 +319,21 @@ def main(argv=None):
     wait.add_argument("--interval", type=float, default=20.0)
     status = subparsers.add_parser("central-status", help="只查一次部署状态")
     status.add_argument("--deployment-id", required=True)
-    subparsers.add_parser("central-auth", help="打印 Authorization 头的值(Bearer …)")
+    upload = subparsers.add_parser("central-upload", help="上传 bundle,只把 deployment id 打到 stdout")
+    upload.add_argument("--bundle", required=True)
+    upload.add_argument("--name", required=True)
     arguments = parser.parse_args(argv)
 
     try:
-        if arguments.command == "central-auth":
-            # 上传步骤用它拼同一个头:构造只在 authorization_header() 里写一次。
-            header = authorization_header()
-            if header is None:
+        if arguments.command == "central-upload":
+            # **只**把 deployment id 打到 stdout:凭据留在请求头里,不进日志。
+            credentials = central_auth()
+            if credentials is None:
                 sys.stderr.write("release-probe: 缺少 CENTRAL_USERNAME/CENTRAL_PASSWORD\n")
                 return 1
-            sys.stdout.write(header)
+            deployment_id = central_upload(arguments.bundle, arguments.name, auth=credentials)
+            sys.stdout.write(deployment_id + "\n")
+            sys.stderr.write("release-probe: Central 接受了 bundle:%s\n" % deployment_id)
             return 0
         if arguments.command == "central-status":
             # 退出码就是给 shell 用的协议:0 已发布 / 3 进行中 / 4 明确失败 / 1 查不出来。

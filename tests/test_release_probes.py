@@ -14,6 +14,7 @@ import base64
 import io
 import json
 import os
+import shutil
 import sys
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -173,7 +174,12 @@ class CentralProbeTest(unittest.TestCase):
 
 
 class CentralAuthorizationTest(unittest.TestCase):
-    """Portal 要 `Authorization: Bearer <base64(user:token)>`，不是 Basic。"""
+    """Portal 要 `Authorization: Bearer <base64(user:token)>`，不是 Basic。
+
+    凭据只能待在请求头里：上传/轮询都在 Python 进程内完成，stdout 只出 deployment id。
+    （把拼好的头打到 stdout 交给 shell 会被 CodeQL 正确地判成"明文打印敏感信息"——
+    base64 凭据不等于 secret 原文，GitHub 的掩码盖不住它。）
+    """
 
     def test_fetch_sends_a_bearer_token(self):
         seen = {}
@@ -208,23 +214,93 @@ class CentralAuthorizationTest(unittest.TestCase):
         self.assertEqual(expected, seen["header"])
         self.assertNotIn("Basic", seen["header"] or "")
 
-    def test_the_header_construction_is_shared_with_the_workflow(self):
-        environment = {"CENTRAL_USERNAME": "user", "CENTRAL_PASSWORD": "token"}
-        with mock.patch.dict(os.environ, environment, clear=False):
-            header = probes.authorization_header()
-            out, err = io.StringIO(), io.StringIO()
-            with redirect_stdout(out), redirect_stderr(err):
-                code = probes.main(["central-auth"])
+    def test_upload_posts_the_multipart_bundle_and_returns_the_id(self):
+        work = ROOT / "tests" / "_tmp" / "probe-upload"
+        shutil.rmtree(str(work), ignore_errors=True)
+        work.mkdir(parents=True)
+        bundle = work / "texel-0.2.0-central.zip"
+        bundle.write_bytes(b"PK\x03\x04bundle-bytes")
+        seen = {}
+
+        class Response(object):
+            status = 201
+
+            def read(self):
+                return b"deployment-id-777\n"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        def fake_urlopen(request, timeout=None):
+            seen["method"] = request.get_method()
+            seen["auth"] = request.get_header("Authorization")
+            seen["type"] = request.get_header("Content-type")
+            seen["body"] = request.data
+            return Response()
+
+        original = probes.urllib.request.urlopen
+        probes.urllib.request.urlopen = fake_urlopen
+        try:
+            deployment_id = probes.central_upload(str(bundle), "texel-v0.2.0",
+                                                  auth=("user", "token"))
+        finally:
+            probes.urllib.request.urlopen = original
+            shutil.rmtree(str(work), ignore_errors=True)
+
+        self.assertEqual("deployment-id-777", deployment_id)
+        self.assertEqual("POST", seen["method"])
+        self.assertEqual("Bearer " + base64.b64encode(b"user:token").decode("ascii"),
+                         seen["auth"])
+        self.assertNotIn("Basic", seen["auth"] or "")
+        self.assertIn("multipart/form-data; boundary=", seen["type"])
+        self.assertIn(b'name="bundle"; filename="texel-0.2.0-central.zip"', seen["body"])
+        self.assertIn(b"PK\x03\x04bundle-bytes", seen["body"])
+
+    def test_upload_command_prints_only_the_id(self):
+        work = ROOT / "tests" / "_tmp" / "probe-upload-cli"
+        shutil.rmtree(str(work), ignore_errors=True)
+        work.mkdir(parents=True)
+        bundle = work / "texel-0.2.0-central.zip"
+        bundle.write_bytes(b"PK\x03\x04")
+        original = probes.urllib.request.urlopen
+
+        class Response(object):
+            status = 201
+
+            def read(self):
+                return b"deployment-id-888\n"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        probes.urllib.request.urlopen = lambda request, timeout=None: Response()
+        try:
+            with mock.patch.dict(os.environ, {"CENTRAL_USERNAME": "user",
+                                              "CENTRAL_PASSWORD": "token"}, clear=False):
+                out, err = io.StringIO(), io.StringIO()
+                with redirect_stdout(out), redirect_stderr(err):
+                    code = probes.main(["central-upload", "--bundle", str(bundle),
+                                        "--name", "texel-v0.2.0"])
+        finally:
+            probes.urllib.request.urlopen = original
+            shutil.rmtree(str(work), ignore_errors=True)
         self.assertEqual(0, code, err.getvalue())
-        self.assertTrue(header.startswith("Bearer "))
-        self.assertEqual(header, out.getvalue(), "工作流拿到的必须与 fetch 发的是同一个头")
+        self.assertEqual("deployment-id-888\n", out.getvalue())
+        self.assertNotIn("token", out.getvalue(), "stdout 只能有 deployment id")
+        self.assertNotIn(base64.b64encode(b"user:token").decode("ascii"), out.getvalue())
 
     def test_missing_credentials_fail_closed(self):
         with mock.patch.dict(os.environ, {"CENTRAL_USERNAME": "", "CENTRAL_PASSWORD": ""}):
             out, err = io.StringIO(), io.StringIO()
             with redirect_stdout(out), redirect_stderr(err):
-                code = probes.main(["central-auth"])
-        self.assertEqual(1, code, "没有凭据就不能拼出空头继续跑")
+                code = probes.main(["central-upload", "--bundle", "x.zip", "--name", "n"])
+        self.assertEqual(1, code, "没有凭据就不能继续")
         self.assertEqual("", out.getvalue())
 
 
@@ -385,7 +461,9 @@ class WorkflowWiringTest(unittest.TestCase):
         # FAILED 后重传会得到新的 id；不覆盖 artifact 就会在同一 run 里失败，
         # 旧 id 永远指向坏部署，下一次重跑又再传一遍（审查 P1）。
         self.assertIn("overwrite: true", self.text)
-        self.assertIn("Authorization: $auth", self.text, "上传必须用 Bearer 头")
+        self.assertIn("central-upload", self.text, "上传必须走 release_probes 的 Bearer 上传")
+        self.assertNotIn("--user \"$CENTRAL_USERNAME", self.text,
+                         "不能用会发 Basic 的 curl --user")
 
     def test_rerun_branch_covers_every_deployment_state(self):
         """完整重跑分支：已发布→跳过、进行中→等到完成、明确失败→允许重传、查不出→红。"""
