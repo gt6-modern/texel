@@ -72,6 +72,16 @@ Register both as **pending** publishers (the projects do not exist before the
 first upload). `Workflow name` is the file name only, and the environment name must
 be filled in.
 
+PyPI renders `readme` verbatim as the project page, and it does **not** rewrite
+relative links: the page lives under `/project/<name>/`, so `../../README.md` or
+`spec/PXL.md` resolve to a 404 on `pypi.org`. Every link in a release page must be
+absolute. `python tools/check_release_metadata.py` enforces that, together with a
+minimum length and a required section set for `README.md`,
+`compiler/python/README.md` and `compiler/java/README.md` — the three pages a
+registry shows — and the POM `name`/`description` that Maven Central renders in
+place of a README. 0.1.0 shipped 3,185 / 1,164 / 38 characters of page text on the
+same version; that is the failure mode these checks exist for.
+
 ### GitHub environments
 
 `release` (GPG secrets), `pypi-importer`, `pypi-compiler`, `maven-central` (Portal

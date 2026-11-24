@@ -3,6 +3,27 @@
 ext.repoRoot = rootProject.projectDir.parentFile.parentFile
 ext.releaseVersion = rootProject.ext.repoRoot.toPath().resolve('VERSION').toFile().getText('UTF-8').trim()
 
+// Maven Central 的 artifact 页**不渲染 README**：它只显示 POM 的 name、description、url、
+// licenses、developers 与 scm。所以这两段就是 Maven 侧唯一的"发布页正文"，必须自己站得住——
+// 原来 `description` 只有 38 / 43 个字符，而同一次发布里 PyPI 的 importer 页有三千多个字符，
+// 三个发布面里 Maven 是那个等于没有说明书的。措辞与三个 README 的"镜像的两半"定位一致。
+// 内容是静态字符串，不影响产物字节可复现（契约 2）。
+ext.pomNames = ['core': 'Texel Core', 'cli': 'Texel CLI']
+ext.pomDescriptions = [
+        'core': [
+                'Deterministic, embeddable PXL compiler for Java 8: renders PXL wire version 1 documents',
+                'to RGBA8 pixels and PNG, with no external dependency (java.base only).',
+                'The Java half of the Texel mirror - for PNG to PXL import use texel-importer,',
+                'for the command line use io.github.gt6-modern:texel-cli.',
+        ].join(' '),
+        'cli': [
+                'Command-line compiler for PXL pixel assets, built on io.github.gt6-modern:texel-core:',
+                'renders PXL wire version 1 to deterministic PNG on Java 8+, with no external dependency.',
+                'For PNG to PXL import use texel-importer; for embedding use',
+                'io.github.gt6-modern:texel-core.',
+        ].join(' '),
+]
+
 subprojects {
     apply plugin: 'java'
     apply plugin: 'maven-publish'
@@ -56,10 +77,8 @@ subprojects {
                 from components.java
                 artifactId = 'texel-' + project.name
                 pom {
-                    name = 'Texel ' + project.name
-                    description = project.name == 'core'
-                            ? 'Deterministic, embeddable PXL compiler'
-                            : 'Command-line compiler for PXL pixel assets'
+                    name = rootProject.ext.pomNames.get(project.name)
+                    description = rootProject.ext.pomDescriptions.get(project.name)
                     url = 'https://github.com/gt6-modern/texel'
                     licenses {
                         license {

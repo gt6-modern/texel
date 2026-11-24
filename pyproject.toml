@@ -6,11 +6,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "texel-importer"
 version = "0.1.0"
-description = "Convert PNG images to deterministic, diff-friendly PXL source files"
+description = "Convert PNG images to deterministic, diff-friendly PXL source files - the importing half of the Texel mirror"
 readme = "README.md"
 requires-python = ">=3.8"
 license = { file = "LICENSE" }
 authors = [{ name = "GT6 Modern contributors" }]
+keywords = ["PXL", "PNG", "pixel art", "deterministic", "diff-friendly", "image format"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "License :: OSI Approved :: Apache Software License",
@@ -21,9 +22,13 @@ dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/gt6-modern/texel"
-Documentation = "https://github.com/gt6-modern/texel#readme"
+Documentation = "https://github.com/gt6-modern/texel/blob/master/docs/getting-started.md"
 Issues = "https://github.com/gt6-modern/texel/issues"
 Source = "https://github.com/gt6-modern/texel"
+Changelog = "https://github.com/gt6-modern/texel/blob/master/CHANGELOG.md"
+Specification = "https://github.com/gt6-modern/texel/blob/master/spec/PXL.md"
+Compiler = "https://pypi.org/project/texel-compiler/"
+"Java implementation" = "https://central.sonatype.com/artifact/io.github.gt6-modern/texel-core"
 
 [project.scripts]
 texel-import = "importer.__main__:main"
