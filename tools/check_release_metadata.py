@@ -108,6 +108,16 @@ def resolve_readme(root, project):
     return target
 
 
+def unwrap_target(target):
+    """Markdown 允许把链接目标包在尖括号里:`[x](<url>)` 与 `[x]: <url>`。
+
+    不做这一步,`<https://…>` 会被当成"不以 https:// 开头"的相对链接而误报。
+    """
+    if len(target) > 2 and target.startswith("<") and target.endswith(">"):
+        return target[1:-1]
+    return target
+
+
 def check_page(name, path, sections, minimum):
     """一个发布页正文:存在、够长、章节齐全、无相对链接。"""
     path = Path(path)
@@ -118,7 +128,8 @@ def check_page(name, path, sections, minimum):
         raise AssertionError("%s is %d characters, below the %d-character floor: %s"
                              % (name, len(text), minimum, path.as_posix()))
     targets = PAGE_LINK.findall(text) + PAGE_LINK_DEFINITION.findall(text)
-    broken = [target for target in targets if not target.startswith(LINK_SKIP)]
+    broken = [target for target in map(unwrap_target, targets)
+              if not target.startswith(LINK_SKIP)]
     if broken:
         raise AssertionError("%s has relative links that resolve nowhere on a registry: %r (%s)"
                              % (name, broken, path.as_posix()))

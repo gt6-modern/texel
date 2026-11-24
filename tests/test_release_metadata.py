@@ -224,6 +224,19 @@ class ReleaseMetadataGateTest(unittest.TestCase):
         self.assertIn("relative links", str(caught.exception))
         self.assertIn("../../README.md", str(caught.exception))
 
+    def test_angle_bracketed_links_are_normalised(self):
+        # Markdown 允许 `[x](<url>)` 与 `[x]: <url>`:包了尖括号的绝对链接必须放行,
+        # 包了尖括号的相对链接仍必须拦下。
+        relative = "compiler/python/README.md"
+        absolute = "<https://github.com/gt6-modern/texel/blob/master/spec/PXL.md>"
+        self.override(relative, self.page_of(relative) + "\n[spec](%s)\n" % absolute)
+        self.assertEqual("0.2.0", gate.check(self.tree))
+
+        self.override(relative, self.page_of(relative) + "\n\n[repository]: <../../README.md>\n")
+        with self.assertRaises(AssertionError) as caught:
+            gate.check(self.tree)
+        self.assertIn("../../README.md", str(caught.exception))
+
     def test_declared_readme_must_exist(self):
         # 页面文件本身在,但 pyproject 把它指到别处:门禁查的必须是 `readme` 声明的那一份。
         self.override("compiler/python/pyproject.toml",
