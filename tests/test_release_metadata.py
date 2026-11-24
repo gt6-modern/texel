@@ -237,6 +237,22 @@ class ReleaseMetadataGateTest(unittest.TestCase):
             gate.check(self.tree)
         self.assertIn("../../README.md", str(caught.exception))
 
+    def test_readme_table_form_is_accepted(self):
+        # PEP 621 的另一种写法:`readme = {file = "…", content-type = "…"}`,不是字符串。
+        self.override("compiler/python/pyproject.toml",
+                      '[project]\nname = "texel-compiler"\nversion = "0.2.0"\n'
+                      'readme = {file = "README.md", content-type = "text/markdown"}\n')
+        self.assertEqual("0.2.0", gate.check(self.tree))
+
+    def test_readme_may_not_escape_the_project(self):
+        # 逃出项目目录的 `readme` 不是这个包会发布的那一页,门禁不该跟着它跑。
+        self.override("compiler/python/pyproject.toml",
+                      '[project]\nname = "texel-compiler"\nversion = "0.2.0"\n'
+                      'readme = "../README.md"\n')
+        with self.assertRaises(AssertionError) as caught:
+            gate.check(self.tree)
+        self.assertIn("escapes", str(caught.exception))
+
     def test_declared_readme_must_exist(self):
         # 页面文件本身在,但 pyproject 把它指到别处:门禁查的必须是 `readme` 声明的那一份。
         self.override("compiler/python/pyproject.toml",

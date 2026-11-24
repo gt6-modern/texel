@@ -18,10 +18,10 @@ Both modules publish a main JAR, a sources JAR, a javadoc JAR and detached signa
 ```java
 FileAssetResolver resolver = FileAssetResolver.rootedAt(assetRoot);
 PxlCompiler.Compiled image = PxlCompiler.compile("entry.pxl", resolver);
-byte[] png = PngEncoder.encode(image.width(), image.height(), image.rgba());
+byte[] png = PngEncoder.encode(image.width(), image.height(), image.renderRgba());
 ```
 
-Public returned arrays and collections are defensive copies. `PxlFormatException.code()` exposes stable `PXL001..PXL012` language codes.
+Public returned arrays and collections are defensive copies: `Compiled.renderRgba()` hands back a fresh array on every call. `PxlFormatException.code()` exposes stable `PXL001..PXL012` language codes.
 
 ## CLI
 

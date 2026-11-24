@@ -94,17 +94,30 @@ LINK_SKIP = ("http://", "https://", "mailto:", "#")
 
 
 def resolve_readme(root, project):
-    """`pyproject` 的 `readme` 指向哪个文件,注册表上那一页就是哪个文件。"""
+    """`pyproject` 的 `readme` 指向哪个文件,注册表上那一页就是哪个文件。
+
+    PEP 621 允许两种写法:`readme = "README.md"` 与
+    `readme = {file = "README.md", content-type = "text/markdown"}`,两种都要认。
+    解析出来的目标还必须落在**本项目目录内**:绝对路径或 `..` 逃逸出去的文件不是这个包会
+    发布的那一页,放行等于让门禁去查一个没人上网的文件。
+    """
     path = Path(root) / project
     if not path.is_file():
         raise AssertionError("%s is missing, so its registry page is undefined" % project)
-    match = re.search(r'(?m)^readme = "([^"]+)"$', path.read_text(encoding="utf-8"))
+    text = path.read_text(encoding="utf-8")
+    match = (re.search(r'(?m)^readme = "([^"]+)"$', text)
+             or re.search(r'(?m)^readme = \{\s*file = "([^"]+)"', text))
     if match is None:
         raise AssertionError("%s declares no readme, so its registry page is undefined" % project)
-    target = path.parent / match.group(1)
+    declared = match.group(1)
+    project_dir = path.parent.resolve()
+    target = (project_dir / declared).resolve()
+    if project_dir != target and project_dir not in target.parents:
+        raise AssertionError("%s declares readme %r, which escapes %s"
+                             % (project, declared, project))
     if not target.is_file():
         raise AssertionError("%s declares readme %r, which does not exist"
-                             % (project, match.group(1)))
+                             % (project, declared))
     return target
 
 
