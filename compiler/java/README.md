@@ -4,7 +4,7 @@
 
 The Java implementation compiles PXL wire version 1 to deterministic RGBA8/PNG. Production classes target Java 8 bytecode and use only `java.base`; JDK 21 builds them with `--release 8`. It is an independent second implementation, not a port of the Python compiler: the two align through the specification and the conformance corpus, and neither is generated from the other.
 
-Maven Central renders only the POM description for an artifact, so the text below is the authoritative long description for `texel-core` and `texel-cli`. The published POMs carry the same `name`, `description`, `url`, license, developer and SCM blocks as this repository.
+Maven Central renders only the POM description for an artifact, so the POM `description` below is the whole Maven-side page for `texel-core` and `texel-cli`. It is generated from `build.gradle`, so it reaches the registry with the next release: the already-published 0.1.0 artifacts keep their one-line description until then.
 
 ## Modules and artifacts
 
@@ -40,7 +40,7 @@ Exit codes distinguish success, usage/conflict, PXL format failure, and host I/O
 ./gradlew --no-daemon :cli:installDist
 ```
 
-Windows users may run `gradlew.bat`. If a custom Gradle cache is required, set `GRADLE_USER_HOME` to any writable directory; no machine-specific path is required. Archives are built with fixed timestamps and a stable entry order, so the JARs and the Central bundle are byte-reproducible and match the assets attached to the GitHub Release.
+Windows users may run `gradlew.bat`. If a custom Gradle cache is required, set `GRADLE_USER_HOME` to any writable directory; no machine-specific path is required. Archives are built with fixed timestamps and a stable entry order, so repeated builds of the same sources produce the same JAR bytes. That claim stops at the bundled `.asc` files: an OpenPGP signature packet embeds its own creation time, so a **signed** bundle differs between runs by construction. Byte equality therefore holds for the JARs, the sources/javadoc artifacts and the unsigned bundle — which is what the GitHub Release assets are compared against.
 
 ## Guarantees
 

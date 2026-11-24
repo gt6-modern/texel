@@ -73,9 +73,12 @@ FILES = {
         "]\n",
 }
 
-#: 三个发布页正文由门禁自己的表生成:章节与字符下限只有一处定义,夹具与判据不会各说一套。
+#: 三个发布页正文由门禁自己的表生成,章节与字符下限只有一处定义,夹具与判据不会各说一套。
+#: PyPI 侧的文件名跟着夹具 pyproject 里那句 `readme = "README.md"` 走。
 FILES.update((relative, page(sections, minimum))
-             for _name, relative, sections, minimum in gate.PAGES)
+             for _name, relative, sections, minimum in gate.MAVEN_PAGES)
+FILES.update(((Path(project).parent / "README.md").as_posix(), page(sections, minimum))
+             for _name, project, sections, minimum in gate.PYPI_PAGES)
 
 #: 每个发布面的"陈旧版本"写法:改这里就能让门禁点名那个面。
 STALE = {
@@ -212,11 +215,24 @@ class ReleaseMetadataGateTest(unittest.TestCase):
             gate.check(self.tree)
         self.assertIn("extra", str(caught.exception))
 
-    def test_declared_readme_must_exist(self):
-        (self.tree / "compiler/python/README.md").unlink()
+    def test_reference_style_link_is_rejected(self):
+        # `[repo]: ../../README.md` 不经过 `](url)` 的内联写法,是绕过相对链接检查的现成路子。
+        relative = "compiler/python/README.md"
+        self.override(relative, self.page_of(relative) + "\n[repository]: ../../README.md\n")
         with self.assertRaises(AssertionError) as caught:
             gate.check(self.tree)
-        self.assertIn("compiler/python/README.md", str(caught.exception))
+        self.assertIn("relative links", str(caught.exception))
+        self.assertIn("../../README.md", str(caught.exception))
+
+    def test_declared_readme_must_exist(self):
+        # 页面文件本身在,但 pyproject 把它指到别处:门禁查的必须是 `readme` 声明的那一份。
+        self.override("compiler/python/pyproject.toml",
+                      '[project]\nname = "texel-compiler"\nversion = "0.2.0"\n'
+                      'readme = "MISSING.md"\n')
+        with self.assertRaises(AssertionError) as caught:
+            gate.check(self.tree)
+        self.assertIn("declares readme", str(caught.exception))
+        self.assertIn("MISSING.md", str(caught.exception))
 
     def test_the_real_repository_passes(self):
         version = gate.check(ROOT)
