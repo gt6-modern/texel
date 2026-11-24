@@ -1,7 +1,6 @@
-
 # Texel
 
-[简体中文](README.zh-CN.md) · [PXL specification (English)](spec/PXL.en.md) · [Normative specification (中文)](spec/PXL.md)
+[简体中文](https://github.com/gt6-modern/texel/blob/master/README.zh-CN.md) · [PXL specification (English)](https://github.com/gt6-modern/texel/blob/master/spec/PXL.en.md) · [Normative specification (中文)](https://github.com/gt6-modern/texel/blob/master/spec/PXL.md)
 
 Texel is an engine-independent toolchain for losslessly mirroring RGBA8 bitmaps as readable, reviewable PXL source files and compiling PXL back to deterministic PNG files.
 
@@ -13,10 +12,12 @@ PXL makes a pixel change reviewable as a token at a coordinate instead of an opa
 
 | Component | Purpose | Runtime |
 | --- | --- | --- |
-| `texel-importer` | PNG → PXL migration and round-trip import | Python 3.8+, standard library only |
-| `texel-compiler` | Independent Python PXL compiler | Python 3.8+, standard library only |
-| `texel-core` | Embeddable Java PXL compiler | Java 8 bytecode, `java.base` only |
-| `texel-cli` | Java command-line compiler | Java 8+ |
+| [`texel-importer`](https://pypi.org/project/texel-importer/) | PNG → PXL migration and round-trip import | Python 3.8+, standard library only |
+| [`texel-compiler`](https://pypi.org/project/texel-compiler/) | Independent Python PXL compiler | Python 3.8+, standard library only |
+| [`texel-core`](https://central.sonatype.com/artifact/io.github.gt6-modern/texel-core) | Embeddable Java PXL compiler | Java 8 bytecode, `java.base` only |
+| [`texel-cli`](https://central.sonatype.com/artifact/io.github.gt6-modern/texel-cli) | Java command-line compiler | Java 8+ |
+
+The importer and the compilers are halves of one mirror, published separately: the importer writes PXL, the compilers read it back. Two independent compilers exist (Python and Java) so that a misreading of the specification cannot pass unnoticed; they share the specification and the conformance corpus, never production code.
 
 ## Five-minute workflow
 
@@ -26,7 +27,18 @@ texel-import texture.png
 python -m texel_compiler compile texture.pxl --asset-root . -o rebuilt.png
 ```
 
-The importer writes a self-contained `version: 1` PXL document next to the PNG. For build integrations and the Java CLI, see [Getting started](docs/getting-started.md).
+The importer writes a self-contained `version: 1` PXL document next to the PNG. For build integrations and the Java CLI, see [Getting started](https://github.com/gt6-modern/texel/blob/master/docs/getting-started.md).
+
+## Registries
+
+| Coordinate | Registry |
+| --- | --- |
+| `texel-importer` | [pypi.org/project/texel-importer](https://pypi.org/project/texel-importer/) |
+| `texel-compiler` | [pypi.org/project/texel-compiler](https://pypi.org/project/texel-compiler/) |
+| `io.github.gt6-modern:texel-core` | [central.sonatype.com](https://central.sonatype.com/artifact/io.github.gt6-modern/texel-core) |
+| `io.github.gt6-modern:texel-cli` | [central.sonatype.com](https://central.sonatype.com/artifact/io.github.gt6-modern/texel-cli) |
+
+All four ship the same version from one tag, alongside the GitHub Release assets.
 
 A minimal PXL document:
 
@@ -67,13 +79,13 @@ cd compiler/java
 ./gradlew --no-daemon clean check -Ppython=python
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete cross-platform gates. The normative language definition is [spec/PXL.md](spec/PXL.md); the two compiler implementations align through that specification and the shared conformance corpus, not shared production code.
+See [CONTRIBUTING.md](https://github.com/gt6-modern/texel/blob/master/CONTRIBUTING.md) for the complete cross-platform gates. The normative language definition is [spec/PXL.md](https://github.com/gt6-modern/texel/blob/master/spec/PXL.md); the two compiler implementations align through that specification and the shared conformance corpus, not shared production code.
 
 ## Community and security
 
-- Questions: [SUPPORT.md](SUPPORT.md)
-- Contributions: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Vulnerabilities: [SECURITY.md](SECURITY.md)
-- Conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- Questions: [SUPPORT.md](https://github.com/gt6-modern/texel/blob/master/SUPPORT.md)
+- Contributions: [CONTRIBUTING.md](https://github.com/gt6-modern/texel/blob/master/CONTRIBUTING.md)
+- Vulnerabilities: [SECURITY.md](https://github.com/gt6-modern/texel/blob/master/SECURITY.md)
+- Conduct: [CODE_OF_CONDUCT.md](https://github.com/gt6-modern/texel/blob/master/CODE_OF_CONDUCT.md)
 
-Code is licensed under the [Apache License 2.0](LICENSE). Sample assets have separate CC0 provenance recorded in [`samples/PROVENANCE.md`](samples/PROVENANCE.md) and [`samples/MANIFEST.tsv`](samples/MANIFEST.tsv).
+Code is licensed under the [Apache License 2.0](https://github.com/gt6-modern/texel/blob/master/LICENSE). Sample assets have separate CC0 provenance recorded in [`samples/PROVENANCE.md`](https://github.com/gt6-modern/texel/blob/master/samples/PROVENANCE.md) and [`samples/MANIFEST.tsv`](https://github.com/gt6-modern/texel/blob/master/samples/MANIFEST.tsv).

@@ -5,10 +5,16 @@
 `RELEASE_METADATA_OK version=0.2.0`。这条门禁守的是"少一个面也红",所以测试用**合成
 目录**跑真门禁,而不是只断言源码里出现过某个正则。
 
+同一个合成目录还承载第二类发布面:**注册表上给人看的那段正文**(`PAGES`)与 Maven 侧的
+POM 正文。0.1.0 的三个发布面曾经是 3,185 / 1,164 / 38 字符,版本号全对、资产全齐,三页
+却像三个项目,而没有任何门禁读过这些文件。下面每条用例各钉一个判据:页存在、够长、
+章节齐全、不含相对链接,以及每个 Gradle 子项目都有自己的 POM name 与够长的 description。
+
 合成目录按本仓库惯例建在 `tests/_tmp/` 下(`tempfile.mkdtemp` 在本机沙箱里建不出可写
 目录),每个用例自己清理。
 """
 
+import re
 import shutil
 import sys
 import unittest
@@ -23,11 +29,21 @@ if str(TOOLS) not in sys.path:
 
 import check_release_metadata as gate
 
+def page(sections, minimum):
+    """合成一页"合格正文":必备章节齐全,并撑到字符下限。"""
+    body = ["# Synthetic release page"]
+    per_section = minimum // max(1, len(sections)) + 1
+    for section in sections:
+        body += ["", "## " + section, "", "x" * per_section]
+    return "\n".join(body) + "\n"
+
+
 #: 合成目录里要写的最小文件集:每一行都是门禁真的会读的东西。
 FILES = {
     "VERSION": "0.2.0\n",
-    "pyproject.toml": '[project]\nname = "texel-importer"\nversion = "0.2.0"\n',
-    "compiler/python/pyproject.toml": '[project]\nname = "texel-compiler"\nversion = "0.2.0"\n',
+    "pyproject.toml": '[project]\nname = "texel-importer"\nversion = "0.2.0"\nreadme = "README.md"\n',
+    "compiler/python/pyproject.toml":
+        '[project]\nname = "texel-compiler"\nversion = "0.2.0"\nreadme = "README.md"\n',
     "compiler/python/texel_compiler/__init__.py": '__version__ = "0.2.0"\n',
     "compiler/python/texel_compiler/capabilities.py": 'COMPILER_VERSION = "0.2.0"\n',
     "compiler/java/cli/src/main/java/io/github/texel/cli/Capabilities.java":
@@ -37,7 +53,29 @@ FILES = {
     "spec/conformance/capabilities/pxl-v1.json":
         '{\n  "compiler_version": "0.2.0"\n}\n',
     "CHANGELOG.md": "# Changelog\n\n## [0.2.0] - 2026-11-21\n\n- 升版。\n",
+    # Maven 侧的正文来源:每个 Gradle 子项目都要一行 name 和一段够长的 description。
+    # description 按真实文件的样子写成多个字面量 + join:门禁只拼接字面量,不执行 Groovy。
+    "compiler/java/settings.gradle":
+        "rootProject.name = 'synthetic'\n\ninclude 'core'\ninclude 'cli'\n",
+    "compiler/java/build.gradle":
+        "ext.pomNames = ['core': 'Texel Core', 'cli': 'Texel CLI']\n"
+        "ext.pomDescriptions = [\n"
+        "        'core': [\n"
+        "                'Deterministic, embeddable PXL compiler for Java 8,',\n"
+        "                'renders PXL wire version 1 to RGBA8 pixels and PNG,',\n"
+        "                'with no external dependency.',\n"
+        "        ].join(' '),\n"
+        "        'cli': [\n"
+        "                'Command-line compiler for PXL pixel assets,',\n"
+        "                'PXL wire version 1 to deterministic PNG on Java 8+,',\n"
+        "                'with no external dependency at all.',\n"
+        "        ].join(' '),\n"
+        "]\n",
 }
+
+#: 三个发布页正文由门禁自己的表生成:章节与字符下限只有一处定义,夹具与判据不会各说一套。
+FILES.update((relative, page(sections, minimum))
+             for _name, relative, sections, minimum in gate.PAGES)
 
 #: 每个发布面的"陈旧版本"写法:改这里就能让门禁点名那个面。
 STALE = {
@@ -121,6 +159,64 @@ class ReleaseMetadataGateTest(unittest.TestCase):
         missing = [relative for relative in read if relative not in text]
         self.assertEqual([], missing, "docs/releasing.md 的升版清单漏了: " + repr(missing))
         self.assertIn("seven files", text, "清单口径要与实际数量一致")
+
+    def page_of(self, relative):
+        return (self.tree / relative).read_text(encoding="utf-8")
+
+    def test_relative_link_in_a_release_page_is_rejected(self):
+        # PyPI 不重写相对路径:`../../README.md` 在注册表上一定 404,所以正文里不许出现。
+        relative = "compiler/python/README.md"
+        self.override(relative, self.page_of(relative) + "\n[repository](../../README.md)\n")
+        with self.assertRaises(AssertionError) as caught:
+            gate.check(self.tree)
+        self.assertIn("python compiler page", str(caught.exception))
+        self.assertIn("relative links", str(caught.exception))
+
+    def test_release_page_that_shrinks_back_is_rejected(self):
+        # `texel-compiler` 那页曾经就是 1,164 字符的子目录 README:够不上下限必须红。
+        self.override("compiler/python/README.md",
+                      "# Texel compiler for Python\n\n## Install and use\n\nx\n")
+        with self.assertRaises(AssertionError) as caught:
+            gate.check(self.tree)
+        self.assertIn("floor", str(caught.exception))
+
+    def test_missing_release_section_is_rejected(self):
+        relative = "compiler/java/README.md"
+        self.override(relative, re.sub(r"(?m)^## Registries$", "## Coordinates",
+                                       self.page_of(relative)))
+        with self.assertRaises(AssertionError) as caught:
+            gate.check(self.tree)
+        self.assertIn("Registries", str(caught.exception))
+
+    def test_pom_description_floor_is_enforced(self):
+        self.override("compiler/java/build.gradle",
+                      "ext.pomNames = ['core': 'Texel Core', 'cli': 'Texel CLI']\n"
+                      "ext.pomDescriptions = [\n"
+                      "        'core': ['Deterministic, embeddable PXL compiler'].join(' '),\n"
+                      "        'cli': [\n"
+                      "                'Command-line compiler for PXL pixel assets,',\n"
+                      "                'PXL wire version 1 to deterministic PNG on Java 8+,',\n"
+                      "                'with no external dependency at all.',\n"
+                      "        ].join(' '),\n"
+                      "]\n")
+        with self.assertRaises(AssertionError) as caught:
+            gate.check(self.tree)
+        self.assertIn("POM description for 'core'", str(caught.exception))
+
+    def test_every_gradle_module_needs_a_pom_entry(self):
+        # 新加一个子项目却忘了写 POM name/description,Central 上那一页就是空的。
+        self.override("compiler/java/settings.gradle",
+                      "rootProject.name = 'synthetic'\n\ninclude 'core'\ninclude 'cli'\n"
+                      "include 'extra'\n")
+        with self.assertRaises(AssertionError) as caught:
+            gate.check(self.tree)
+        self.assertIn("extra", str(caught.exception))
+
+    def test_declared_readme_must_exist(self):
+        (self.tree / "compiler/python/README.md").unlink()
+        with self.assertRaises(AssertionError) as caught:
+            gate.check(self.tree)
+        self.assertIn("compiler/python/README.md", str(caught.exception))
 
     def test_the_real_repository_passes(self):
         version = gate.check(ROOT)

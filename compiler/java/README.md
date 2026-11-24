@@ -1,22 +1,19 @@
 # Texel compiler for Java
 
-[Repository documentation](../../README.md) · [Normative PXL specification](../../spec/PXL.md)
+[简体中文](https://github.com/gt6-modern/texel/blob/master/README.zh-CN.md) · [Repository](https://github.com/gt6-modern/texel) · [Normative PXL specification](https://github.com/gt6-modern/texel/blob/master/spec/PXL.md) · [English specification](https://github.com/gt6-modern/texel/blob/master/spec/PXL.en.md)
 
-The Java implementation compiles PXL wire version 1 to deterministic RGBA8/PNG. Production classes target Java 8 bytecode and use only `java.base`; JDK 21 is used to build with `--release 8`.
+The Java implementation compiles PXL wire version 1 to deterministic RGBA8/PNG. Production classes target Java 8 bytecode and use only `java.base`; JDK 21 builds them with `--release 8`. It is an independent second implementation, not a port of the Python compiler: the two align through the specification and the conformance corpus, and neither is generated from the other.
 
-## Build
-
-```console
-./gradlew --no-daemon clean check -Ppython=python
-./gradlew --no-daemon :cli:installDist
-```
-
-Windows users may run `gradlew.bat`. If a custom Gradle cache is required, set `GRADLE_USER_HOME` to any writable directory; no machine-specific path is required.
+Maven Central renders only the POM description for an artifact, so the text below is the authoritative long description for `texel-core` and `texel-cli`. The published POMs carry the same `name`, `description`, `url`, license, developer and SCM blocks as this repository.
 
 ## Modules and artifacts
 
-- `io.github.gt6-modern:texel-core:0.1.0`: embeddable compiler, resolvers, PNG encoder, pixel digest, and structured PXL errors.
-- `io.github.gt6-modern:texel-cli:0.1.0`: command-line application; the GitHub Release `installDist` archive is the recommended end-user distribution.
+| Coordinate | Purpose |
+| --- | --- |
+| `io.github.gt6-modern:texel-core:0.1.0` | Embeddable compiler, resolvers, PNG encoder, pixel digest, structured PXL errors |
+| `io.github.gt6-modern:texel-cli:0.1.0` | Command-line application; the GitHub Release `installDist` archive is the recommended end-user distribution |
+
+Both modules publish a main JAR, a sources JAR, a javadoc JAR and detached signatures. The pair is the Java half of the mirror whose other half is [`texel-importer`](https://pypi.org/project/texel-importer/) and [`texel-compiler`](https://pypi.org/project/texel-compiler/) on PyPI.
 
 ```java
 FileAssetResolver resolver = FileAssetResolver.rootedAt(assetRoot);
@@ -35,3 +32,38 @@ texel-compiler check entry.pxl --asset-root .
 ```
 
 Exit codes distinguish success, usage/conflict, PXL format failure, and host I/O/resource failure. Output and dependency manifests use temporary files plus atomic replacement; a failed compilation leaves no partial artifact.
+
+## Build
+
+```console
+./gradlew --no-daemon clean check -Ppython=python
+./gradlew --no-daemon :cli:installDist
+```
+
+Windows users may run `gradlew.bat`. If a custom Gradle cache is required, set `GRADLE_USER_HOME` to any writable directory; no machine-specific path is required. Archives are built with fixed timestamps and a stable entry order, so the JARs and the Central bundle are byte-reproducible and match the assets attached to the GitHub Release.
+
+## Guarantees
+
+- Round trips are compared by raw row-major RGBA8 pixels, not PNG file bytes.
+- Rendering, dependency manifests and PNG output are deterministic across platforms and locales.
+- Color arithmetic is integer-only; operations never create partial pixel coverage.
+- Only exact `00000000` uses the transparent slot. RGB values with alpha 0 remain distinct colors.
+- No runtime dependency: production code binds to `java.base` only, enforced by a build gate that checks every class major version and module dependency.
+
+## Registries
+
+| Coordinate | Registry |
+| --- | --- |
+| `texel-importer` | [PyPI](https://pypi.org/project/texel-importer/) |
+| `texel-compiler` | [PyPI](https://pypi.org/project/texel-compiler/) |
+| `io.github.gt6-modern:texel-core` | [Maven Central](https://central.sonatype.com/artifact/io.github.gt6-modern/texel-core) |
+| `io.github.gt6-modern:texel-cli` | [Maven Central](https://central.sonatype.com/artifact/io.github.gt6-modern/texel-cli) |
+
+## Community and security
+
+- Questions: [SUPPORT.md](https://github.com/gt6-modern/texel/blob/master/SUPPORT.md)
+- Contributions: [CONTRIBUTING.md](https://github.com/gt6-modern/texel/blob/master/CONTRIBUTING.md)
+- Vulnerabilities: [SECURITY.md](https://github.com/gt6-modern/texel/blob/master/SECURITY.md)
+- Conduct: [CODE_OF_CONDUCT.md](https://github.com/gt6-modern/texel/blob/master/CODE_OF_CONDUCT.md)
+
+Code is licensed under the [Apache License 2.0](https://github.com/gt6-modern/texel/blob/master/LICENSE); attribution notices are in [NOTICE](https://github.com/gt6-modern/texel/blob/master/NOTICE).

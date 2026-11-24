@@ -10,6 +10,31 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
   holding one substring per line. When present, a failing implementation must match at least one
   line, so "rejected with the right code for the wrong reason" no longer passes. Applied to the
   38 PNG rejects that all share `PXL006`; `python_ref_verify` and the Java PNG gate both enforce it.
+- `tools/check_release_metadata.py` now gates the release-page text itself, not just version
+  numbers: each registry-facing page must exist, carry a required section set, stay above a
+  length floor and contain no relative link, and every Gradle subproject must carry a POM `name`
+  and a `description` above the floor. `tests/test_release_metadata.py` proves each rule can
+  fail, including the 1,164-character page that started this.
+
+### Changed
+- The three release surfaces now describe the same product. `texel-compiler`'s PyPI page was the
+  25-line subdirectory README - 1,164 characters against the importer's 3,185 - and Maven Central
+  showed a one-clause POM description (38 characters for `texel-core`, 43 for `texel-cli`). Both
+  compiler pages now carry the positioning, component table, minimal document, guarantees,
+  verification steps, registry coordinates and community links the importer page already had, and
+  each page names the other half of the mirror.
+- Per-module POM `name` and `description` state what the artifact does, which mirror half it is and
+  which coordinate to use instead (`Texel Core` / `Texel CLI`, not `Texel core` / `Texel cli`).
+  Maven Central renders only the POM for an artifact, so that text is the whole Maven-side page.
+- Every Markdown link in the release-page sources is now an absolute URL. PyPI renders
+  `long_description` verbatim and does not rewrite relative paths, so the published pages carried
+  13 targets on the importer page (`README.zh-CN.md`, `spec/PXL.md`, `LICENSE`,
+  `samples/MANIFEST.tsv`, ...) and 2 on each compiler README (`../../README.md`,
+  `../../spec/PXL.md`) that resolved against `pypi.org` and returned 404. The absolute URLs are
+  pinned to the repository's `master` branch, which is the only published head.
+- Both `pyproject.toml` files gained `keywords`, `Changelog` / `Specification` project URLs and a
+  cross-link to the sibling package and the Java artifacts; `Documentation` now points at
+  `docs/getting-started.md` instead of the repository `#readme` anchor.
 
 ### Fixed
 - Core §8.5 now states that a value check depending on another chunk must first establish that the
