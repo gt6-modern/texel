@@ -4,7 +4,7 @@
 
 The Java implementation compiles PXL wire version 1 to deterministic RGBA8/PNG. Production classes target Java 8 bytecode and use only `java.base`; JDK 21 builds them with `--release 8`. It is an independent second implementation, not a port of the Python compiler: the two align through the specification and the conformance corpus, and neither is generated from the other.
 
-Maven Central renders only the POM description for an artifact, so the POM `description` below is the whole Maven-side page for `texel-core` and `texel-cli`. It is generated from `build.gradle`, so it reaches the registry with the next release: the already-published 0.1.0 artifacts keep their one-line description until then.
+Maven Central renders only the POM description for an artifact, so the POM `description` in `compiler/java/build.gradle` is the whole Maven-side page for `texel-core` and `texel-cli`. It reaches the registry with the next release: the already-published 0.1.0 artifacts keep their one-line description until then.
 
 ## Modules and artifacts
 

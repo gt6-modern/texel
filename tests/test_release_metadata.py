@@ -80,6 +80,19 @@ FILES.update((relative, page(sections, minimum))
 FILES.update(((Path(project).parent / "README.md").as_posix(), page(sections, minimum))
              for _name, project, sections, minimum in gate.PYPI_PAGES)
 
+#: 夹具从门禁的表反推,好处是不漂,代价是"表本身"没人守:把某一节或下限放宽,18 条用例照旧
+#: 全绿。所以期望值在这里**另写一份字面量**——改表就得同时改这里,改不动就是有人真在放水。
+EXPECTED_PAGES = {
+    "importer page": ("Components", "Five-minute workflow", "Registries", "Guarantees",
+                      "Community and security"),
+    "python compiler page": ("Components", "Install and use", "Registries", "Guarantees",
+                             "Community and security"),
+    "java module page": ("Modules and artifacts", "Build", "Registries", "Guarantees",
+                         "Community and security"),
+}
+EXPECTED_FLOOR = 2500
+EXPECTED_POM_FLOOR = 120
+
 #: 每个发布面的"陈旧版本"写法:改这里就能让门禁点名那个面。
 STALE = {
     "pyproject.toml": '[project]\nversion = "0.1.0"\n',
@@ -228,7 +241,7 @@ class ReleaseMetadataGateTest(unittest.TestCase):
         # Markdown 允许 `[x](<url>)` 与 `[x]: <url>`:包了尖括号的绝对链接必须放行,
         # 包了尖括号的相对链接仍必须拦下。
         relative = "compiler/python/README.md"
-        absolute = "<https://github.com/gt6-modern/texel/blob/master/spec/PXL.md>"
+        absolute = "<https://github.com/gt6-modern/texel/blob/master/README.md>"
         self.override(relative, self.page_of(relative) + "\n[spec](%s)\n" % absolute)
         self.assertEqual("0.2.0", gate.check(self.tree))
 
@@ -252,6 +265,85 @@ class ReleaseMetadataGateTest(unittest.TestCase):
         with self.assertRaises(AssertionError) as caught:
             gate.check(self.tree)
         self.assertIn("escapes", str(caught.exception))
+
+    def test_the_tables_themselves_are_nailed_down(self):
+        """门禁表与这里的字面量必须一致。
+
+        夹具反向生成保证了"夹具不漂",却让"必备章节集合"和"字符下限"本身没有测试:
+        把 `"Registries"` 从表里删掉,所有用例仍绿。这条是那两处的独立钉子。
+        """
+        observed = dict((name, tuple(sections))
+                        for name, _project, sections, _min
+                        in list(gate.PYPI_PAGES) + list(gate.MAVEN_PAGES))
+        self.assertEqual(EXPECTED_PAGES, observed)
+        for name, _project, _sections, minimum in list(gate.PYPI_PAGES) + list(gate.MAVEN_PAGES):
+            self.assertEqual(EXPECTED_FLOOR, minimum, name)
+        self.assertEqual(EXPECTED_POM_FLOOR, gate.POM_DESCRIPTION_MIN_CHARS)
+
+    def test_inline_relative_link_with_title_is_rejected(self):
+        # `[x](../../README.md "repo")` 是合法且常见的 Markdown:正则只要在空格处停下,
+        # 这条就会静默放行——而它正是门禁存在的理由。
+        relative = "compiler/python/README.md"
+        self.override(relative, self.page_of(relative) + '\n[r](../../README.md "repo")\n')
+        with self.assertRaises(AssertionError) as caught:
+            gate.check(self.tree)
+        self.assertIn("relative links", str(caught.exception))
+        self.assertIn("../../README.md", str(caught.exception))
+
+    def test_fenced_code_is_not_scanned_for_links(self):
+        # 示例里出现 Markdown 片段不该让发布页门禁变红:围栏里的内容不是链接。
+        relative = "compiler/python/README.md"
+        self.override(relative, self.page_of(relative) +
+                      '\n```json\n{"example": "[r](../../README.md)"}\n```\n')
+        self.assertEqual("0.2.0", gate.check(self.tree))
+
+    def test_repository_link_to_a_missing_path_is_rejected(self):
+        # 相对链接全改绝对之后,「发布页上的链接 404」换了个形式,不能就此无人守。
+        relative = "compiler/python/README.md"
+        self.override(relative, self.page_of(relative) +
+                      "\n[gone](https://github.com/gt6-modern/texel/blob/master/NO_SUCH_FILE.md)\n")
+        with self.assertRaises(AssertionError) as caught:
+            gate.check(self.tree)
+        self.assertIn("do not exist", str(caught.exception))
+        self.assertIn("NO_SUCH_FILE.md", str(caught.exception))
+
+    def test_repository_link_to_a_real_path_is_accepted(self):
+        relative = "compiler/python/README.md"
+        self.override(relative, self.page_of(relative) +
+                      "\n[repo](https://github.com/gt6-modern/texel/blob/master/README.md)\n")
+        self.assertEqual("0.2.0", gate.check(self.tree))
+
+    def test_repository_link_on_another_branch_is_rejected(self):
+        relative = "compiler/python/README.md"
+        self.override(relative, self.page_of(relative) +
+                      "\n[repo](https://github.com/gt6-modern/texel/blob/main/README.md)\n")
+        with self.assertRaises(AssertionError) as caught:
+            gate.check(self.tree)
+        self.assertIn("branch other than", str(caught.exception))
+
+    def test_readme_literal_string_is_accepted(self):
+        # TOML 的 literal string(`readme = 'README.md'`)也是合法写法,不该被当成没声明。
+        self.override("compiler/python/pyproject.toml",
+                      "[project]\nname = \"texel-compiler\"\nversion = \"0.2.0\"\n"
+                      "readme = 'README.md'\n")
+        self.assertEqual("0.2.0", gate.check(self.tree))
+
+    def test_generated_pom_mismatch_is_rejected(self):
+        # 真正上网的是 Gradle 生成的那份 XML:key 拼错、`.get()` 返回 null,
+        # 静态查 build.gradle 一律看不出来。
+        pom = self.tree / "compiler/java/core/build/publications/mavenJava/pom-default.xml"
+        pom.parent.mkdir(parents=True, exist_ok=True)
+        pom.write_text("<project><name>Texel core</name><description>x</description></project>\n",
+                       encoding="utf-8")
+        with self.assertRaises(AssertionError) as caught:
+            gate.check(self.tree)
+        self.assertIn("generated POM name", str(caught.exception))
+
+    def test_generated_poms_can_be_required(self):
+        # CI 的 Java 作业先跑生成任务再带这个开关:缺文件必须红,而不是悄悄跳过。
+        with self.assertRaises(AssertionError) as caught:
+            gate.check(self.tree, require_generated_poms=True)
+        self.assertIn("no generated POM for module", str(caught.exception))
 
     def test_declared_readme_must_exist(self):
         # 页面文件本身在,但 pyproject 把它指到别处:门禁查的必须是 `readme` 声明的那一份。

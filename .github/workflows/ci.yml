@@ -85,6 +85,14 @@ jobs:
       - name: gradlew check(全量 base 用例 + discipline)
         working-directory: compiler/java
         run: ./gradlew --no-daemon check -Ppython=python
+      # Maven 侧正文只有**真正生成的 POM** 才算数:`ext.pomNames.get(project.name)` 返回 null、
+      # key 大小写拼错、模板写法变了,静态查 build.gradle 一律看不出来,而 Central 上就是空 name。
+      # 所以先跑生成任务,再要求门禁比对 pom-default.xml。
+      - name: 发布用的 POM 正文必须真的生成出来
+        working-directory: compiler/java
+        run: |
+          ./gradlew --no-daemon :core:generatePomFileForMavenJavaPublication :cli:generatePomFileForMavenJavaPublication
+          cd ../.. && python tools/check_release_metadata.py --require-generated-poms
       # 构建集成的增量门禁（改依赖失效 / 改无关文件不失效 / 缓存开关不改字节）。
       # 需要 compiler 的 installDist 产物，所以放在 check 之后。
       - name: 构建集成的增量门禁

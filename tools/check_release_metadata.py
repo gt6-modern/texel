@@ -11,6 +11,7 @@
 POM description。版本号全对、资产全齐,三页却像三个项目:没有任何门禁读过这些正文。这里把
 "正文必须存在、必须够长、必须有约定章节、不许有相对链接"钉住,并把 Maven 侧的 POM 正文一起查。
 """
+import argparse
 import json
 import re
 import sys
@@ -86,18 +87,32 @@ POM_DESCRIPTION_MIN_CHARS = 120
 
 #: PyPI 原样渲染 Markdown、不重写相对路径:页面挂在 `/project/<name>/` 下,
 #: `../../README.md` 会被解析成 pypi.org 上的 404。发布页正文里只许绝对链接。
-#: 行内写法 `](url)` 与引用式定义 `[label]: url` 都要查——后者是绕过门禁的现成路子。
-PAGE_LINK = re.compile(r"\]\(([^)\s]+)\)")
-PAGE_LINK_DEFINITION = re.compile(r"(?m)^ {0,3}\[[^\]\n]+\]:[ \t]*(\S+)")
+#:
+#: 三种合法写法都要认:`[x](url)`、`[x](<url>)`、`[x](url "title")`。只认第一种会让
+#: `[x](../../README.md "repo")` 静默放行——那恰恰是这道门禁存在的理由,漏在它身上最荒唐。
+PAGE_LINK = re.compile(r"\]\(\s*<?([^)\s>]+)>?(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)")
+#: 引用式定义 `[label]: url`(可带 title)是第二条路,同样是现成的绕过手段。
+PAGE_LINK_DEFINITION = re.compile(r"(?m)^ {0,3}\[[^\]\n]+\]:[ \t]*<?([^\s>]+)>?")
+#: 围栏代码块里的内容不是链接:示例里出现 Markdown 片段不该让发布页门禁变红。
+PAGE_FENCE = re.compile(r"(?ms)^ {0,3}(`{3,}|~{3,})[^\n]*\n.*?^ {0,3}\1[ \t]*$")
 PAGE_HEADING = re.compile(r"(?m)^## +(.+?)\s*$")
 LINK_SKIP = ("http://", "https://", "mailto:", "#")
+
+#: 仓库内绝对链接:指向哪个分支、指向的路径在不在,两件事都得管。相对链接全改绝对之后,
+#: 「链接 404」这个原始故障只是换了个形式——重命名一个文档、换一个默认分支,八条 URL 一起烂,
+#: 而只查「是否以 https:// 开头」的门禁一条都不会红。
+REPO_URL = "https://github.com/gt6-modern/texel/"
+PAGE_BRANCH = "master"
+REPO_LINK = re.compile(
+    r"^https://github\.com/gt6-modern/texel/(?:blob|tree)/([^/]+)/(.+?)(?:[?#].*)?$")
 
 
 def resolve_readme(root, project):
     """`pyproject` 的 `readme` 指向哪个文件,注册表上那一页就是哪个文件。
 
     PEP 621 允许两种写法:`readme = "README.md"` 与
-    `readme = {file = "README.md", content-type = "text/markdown"}`,两种都要认。
+    `readme = {file = "README.md", content-type = "text/markdown"}`,两种都要认;
+    TOML 的 basic string 与 literal string(`'README.md'`)也都是合法写法。
     解析出来的目标还必须落在**本项目目录内**:绝对路径或 `..` 逃逸出去的文件不是这个包会
     发布的那一页,放行等于让门禁去查一个没人上网的文件。
     """
@@ -105,10 +120,11 @@ def resolve_readme(root, project):
     if not path.is_file():
         raise AssertionError("%s is missing, so its registry page is undefined" % project)
     text = path.read_text(encoding="utf-8")
-    match = (re.search(r'(?m)^readme = "([^"]+)"$', text)
-             or re.search(r'(?m)^readme = \{\s*file = "([^"]+)"', text))
+    match = (re.search(r"(?m)^readme = [\"']([^\"']+)[\"']$", text)
+             or re.search(r"(?m)^readme = \{\s*file = [\"']([^\"']+)[\"']", text))
     if match is None:
-        raise AssertionError("%s declares no readme, so its registry page is undefined" % project)
+        raise AssertionError("%s has no `readme` the gate can parse (string or file form), "
+                             "so its registry page is undefined" % project)
     declared = match.group(1)
     project_dir = path.parent.resolve()
     target = (project_dir / declared).resolve()
@@ -131,8 +147,9 @@ def unwrap_target(target):
     return target
 
 
-def check_page(name, path, sections, minimum):
-    """一个发布页正文:存在、够长、章节齐全、无相对链接。"""
+def check_page(root, name, path, sections, minimum):
+    """一个发布页正文:存在、够长、章节齐全、无相对链接、仓库内绝对链接真的指得到东西。"""
+    root = Path(root)
     path = Path(path)
     if not path.is_file():
         raise AssertionError("%s is missing: %s" % (name, path.as_posix()))
@@ -140,12 +157,32 @@ def check_page(name, path, sections, minimum):
     if len(text) < minimum:
         raise AssertionError("%s is %d characters, below the %d-character floor: %s"
                              % (name, len(text), minimum, path.as_posix()))
-    targets = PAGE_LINK.findall(text) + PAGE_LINK_DEFINITION.findall(text)
-    broken = [target for target in map(unwrap_target, targets)
-              if not target.startswith(LINK_SKIP)]
+    scannable = PAGE_FENCE.sub("", text)
+    targets = [unwrap_target(target)
+               for target in PAGE_LINK.findall(scannable) + PAGE_LINK_DEFINITION.findall(scannable)]
+    broken = [target for target in targets if not target.startswith(LINK_SKIP)]
     if broken:
         raise AssertionError("%s has relative links that resolve nowhere on a registry: %r (%s)"
                              % (name, broken, path.as_posix()))
+    wrong_branch = []
+    missing_paths = []
+    for target in targets:
+        if not target.startswith(REPO_URL):
+            continue
+        match = REPO_LINK.match(target)
+        if match is None:
+            continue
+        branch, rest = match.group(1), match.group(2).rstrip("/")
+        if branch != PAGE_BRANCH:
+            wrong_branch.append(target)
+        elif not (root / rest).exists():
+            missing_paths.append(rest)
+    if wrong_branch:
+        raise AssertionError("%s links to a branch other than %r: %r (%s)"
+                             % (name, PAGE_BRANCH, wrong_branch[:3], path.as_posix()))
+    if missing_paths:
+        raise AssertionError("%s links to repository paths that do not exist: %r (%s)"
+                             % (name, missing_paths[:5], path.as_posix()))
     headings = PAGE_HEADING.findall(text)
     missing = [section for section in sections if section not in headings]
     if missing:
@@ -153,16 +190,21 @@ def check_page(name, path, sections, minimum):
 
 
 def check_pom_surfaces(root):
-    """每个 Gradle 子项目都要有自己的 POM name 与够长的 POM description。"""
+    """每个 Gradle 子项目都要有自己的 POM name 与够长的 POM description。
+
+    返回 `module -> (name, description)` 供生成物校验复用。
+    """
     root = Path(root)
     settings = (root / JAVA_SETTINGS).read_text(encoding="utf-8")
     modules = re.findall(r"(?m)^include '([^']+)'$", settings)
     if not modules:
         raise AssertionError("no Gradle subproject declared in " + JAVA_SETTINGS)
     build = (root / JAVA_BUILD).read_text(encoding="utf-8")
+    expected = {}
     for module in modules:
         quoted = re.escape(module)
-        if re.search(r"'" + quoted + r"': '[^']+'", build) is None:
+        name = re.search(r"'" + quoted + r"': '([^']+)'", build)
+        if name is None:
             raise AssertionError("ext.pomNames has no entry for module %r (%s)"
                                  % (module, JAVA_BUILD))
         entry = re.search(r"'" + quoted + r"': \[(.*?)\]\.join\(' '\)", build, re.S)
@@ -174,9 +216,46 @@ def check_pom_surfaces(root):
             raise AssertionError(
                 "POM description for %r is %d characters, below the %d-character floor: %r"
                 % (module, len(description), POM_DESCRIPTION_MIN_CHARS, description))
+        expected[module] = (name.group(1), description)
+    return expected
 
 
-def check(root):
+def check_generated_poms(root, expected, require=False):
+    """真正要上网的是 `generatePomFileFor…Publication` 产出那份 XML,不是 build.gradle 的文本。
+
+    静态正则查得到「表里写没写」,查不到「Gradle 求值后还剩什么」:key 拼错、`.get()`
+    返回 null、模板写法变了,都能让 Central 上出现一个空 name 的页面而门禁全绿。
+    `require=True` 时(CI 的 Java 作业先跑生成任务)缺文件即失败;否则仅在存在时比对。
+    """
+    root = Path(root)
+    checked = 0
+    for module, (name, description) in expected.items():
+        candidate = (root / "compiler" / "java" / module / "build" / "publications" /
+                     "mavenJava" / "pom-default.xml")
+        if not candidate.is_file():
+            if require:
+                raise AssertionError(
+                    "no generated POM for module %r; run "
+                    "`./gradlew :%s:generatePomFileForMavenJavaPublication` first (%s)"
+                    % (module, module, candidate.as_posix()))
+            continue
+        xml = candidate.read_text(encoding="utf-8")
+        got_name = re.search(r"<name>(.*?)</name>", xml, re.S)
+        got_description = re.search(r"<description>(.*?)</description>", xml, re.S)
+        if got_name is None or got_name.group(1).strip() != name:
+            raise AssertionError(
+                "generated POM name for %r is %r, expected %r (%s)"
+                % (module, got_name.group(1).strip() if got_name else None, name,
+                   candidate.as_posix()))
+        if got_description is None or got_description.group(1).strip() != description:
+            raise AssertionError(
+                "generated POM description for %r does not match build.gradle (%s)"
+                % (module, candidate.as_posix()))
+        checked += 1
+    return checked
+
+
+def check(root, require_generated_poms=False):
     """返回版本号;任何发布面不一致就 AssertionError。"""
     root = Path(root)
     version, observed = observe(root)
@@ -187,15 +266,21 @@ def check(root):
     if ("## [" + version + "]") not in changelog:
         raise AssertionError("CHANGELOG has no release section for " + version)
     for name, project, sections, minimum in PYPI_PAGES:
-        check_page(name, resolve_readme(root, project), sections, minimum)
+        check_page(root, name, resolve_readme(root, project), sections, minimum)
     for name, relative, sections, minimum in MAVEN_PAGES:
-        check_page(name, root / relative, sections, minimum)
-    check_pom_surfaces(root)
+        check_page(root, name, root / relative, sections, minimum)
+    expected_poms = check_pom_surfaces(root)
+    check_generated_poms(root, expected_poms, require=require_generated_poms)
     return version
 
 
-def main():
-    print("RELEASE_METADATA_OK version=" + check(ROOT))
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="发布版本面与发布页正文的一致性门禁")
+    parser.add_argument(
+        "--require-generated-poms", action="store_true",
+        help="要求 Gradle 已生成 pom-default.xml 并与 build.gradle 的 name/description 一致")
+    args = parser.parse_args(argv)
+    print("RELEASE_METADATA_OK version=" + check(ROOT, args.require_generated_poms))
     return 0
 
 

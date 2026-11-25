@@ -82,6 +82,20 @@ registry shows — and the POM `name`/`description` that Maven Central renders i
 place of a README. 0.1.0 shipped 3,185 / 1,164 / 38 characters of page text on the
 same version; that is the failure mode these checks exist for.
 
+Three further rules are cheap to state and were each a live hole at some point:
+
+- A link to this repository must use `master` and point at a path that exists in
+  the working tree. Absolute-only checking just moved the 404 from a relative
+  link to a hard-coded one; renaming a document or the default branch rots eight
+  URLs silently.
+- Fenced code blocks are not scanned: an example that contains Markdown is not a
+  link. Link scanning also understands `[x](url "title")` and `[x](<url>)`.
+- `python tools/check_release_metadata.py --require-generated-poms` compares the
+  POM that Gradle actually produced (`build/publications/mavenJava/pom-default.xml`)
+  against `ext.pomNames` / `ext.pomDescriptions`. The CI `build` job runs the two
+  `generatePomFileForMavenJavaPublication` tasks and then this mode, because a
+  green static check on `build.gradle` says nothing about what the registry gets.
+
 ### GitHub environments
 
 `release` (GPG secrets), `pypi-importer`, `pypi-compiler`, `maven-central` (Portal

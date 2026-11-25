@@ -13,8 +13,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) an
 - `tools/check_release_metadata.py` now gates the release-page text itself, not just version
   numbers: each registry-facing page must exist, carry a required section set, stay above a
   length floor and contain no relative link, and every Gradle subproject must carry a POM `name`
-  and a `description` above the floor. `tests/test_release_metadata.py` proves each rule can
-  fail, including the 1,164-character page that started this.
+  and a `description` above the floor. Links to this repository must use `master` and resolve to a
+  path that exists, fenced code is excluded from link scanning, and
+  `--require-generated-poms` compares the POM Gradle actually emits against those values (the CI
+  `build` job runs it after the `generatePomFileForMavenJavaPublication` tasks).
+  `tests/test_release_metadata.py` proves each rule can fail, including the 1,164-character page
+  that started this.
 
 ### Changed
 - The three release surfaces now describe the same product. `texel-compiler`'s PyPI page was the
